@@ -25,8 +25,8 @@ class Matrix_info:
 	maxposition: int = field(default=-1)
 	insertion_columns_list: list = field(default="")
 	possible_insert: list = field(default="")
-	#narrowed_matrix: sp.coo_matrix = field(default="")
-	matrix: sp.coo_matrix = field(default="")
+	narrowed_matrix: sp.coo_matrix = field(default="")
+	real_narrowed_matrix: sp.coo_matrix = field(default="")
 
 
 #narrowed_read = []
@@ -231,7 +231,7 @@ def matrix_from_readlist(read_list, match_limit, marked_id, initial=False):
 	csc = sp.coo_matrix((info_collection.val, (info_collection.row, info_collection.col))).tocsc()  # matrix
 	print("max position at",info_collection.maxposition, info_collection.col[-1],maxindex)
 	print("insertion_reads", len(insertion_reads))
-	info_collection.matrix = csc.copy()
+	info_collection.real_narrowed_matrix = csc.copy()
 
 #	if initial:
 #		narrowed_read = narrowed.copy()
@@ -243,7 +243,7 @@ def build_insertion(intermit_matrix_info, count_threshold):
 	#global maxposition,exclude_reads,read_number,cor_record
 	max_shape = intermit_matrix_info.max_shape
 	insertion_reads = intermit_matrix_info.insertion_reads
-	csc = intermit_matrix_info.matrix
+	csc = intermit_matrix_info.real_narrowed_matrix
 	insertion_columns = set({})
 	print("add_matrix",max_shape)
 	add_matrix = sp.coo_matrix(max_shape, dtype=np.int32).tocsc()
@@ -394,7 +394,7 @@ def build_insertion(intermit_matrix_info, count_threshold):
 	else:
 		print("no insertion")
 		add_matrix = csc
-	intermit_matrix_info.matrix = add_matrix
+	intermit_matrix_info.real_narrowed_matrix = add_matrix
 	intermit_matrix_info.insertion_columns_list = insertion_columns_list
 	return intermit_matrix_info
 
@@ -507,6 +507,7 @@ def marking(read_num, cvg,narrowed_read, col=0):
 			if marked == cvg:
 				return marked_id_list
 	return marked_id_list
+
 
 
 def write_new_extract(narrowed_read,marked_id,out_dir, round_num):

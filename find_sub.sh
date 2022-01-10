@@ -253,8 +253,9 @@ function extract_sam {
 }
 
 cp /dev/null find_sub_log.txt
+len_limit=$(bc<<<$( tr -d '\r' < "$ref" | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)\*0.7)
 for i in {1..1};do
-    echo "$i $ref"
+    echo "$i $ref $len_limit"
     #out_dir=round_"$i"_output
     #contig_dir=round_"$i"_contig
     out_dir="${ref##*/}"_output
@@ -262,7 +263,7 @@ for i in {1..1};do
 
 
     fL=$( tr -d '\r' < "$ref" | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)
-    if [ $fL -lt 20000 ]; then
+    if (( $(echo "$fL < $len_limit" | bc -l) )); then
         echo "gene length $fL too short"
         exit
     fi
@@ -317,7 +318,7 @@ for i in {1..1};do
     #ref=$(<../${1})
     #echo $ref
     match_limit=1 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
-    echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --round=$i --excluded_IDs=/dev/null";
+    echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --round=$i --excluded_IDs=/dev/null --find_sub=True";
 
     if [ $i -eq 1 ]; then
         cp /dev/null  "excluded_IDs.txt"

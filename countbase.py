@@ -800,6 +800,42 @@ def search_ID(id_set,readfile,outfile):
             for line in lines:
                 wr1.write(line)
 
+
+def remove_ID_fastq():
+    ID_list = []
+    with open(sys.argv[1], "r") as trf:
+        for line in trf:
+            ID_list.extend(line.split(" "))
+    if len(ID_list) == 0:
+        print("no reads to be removed")
+        exit(2)
+    id_set = set(ID_list)
+    id_set.remove("")
+    print(id_set)
+    #exit(1)
+    with mp.Pool(2) as pool:
+        lparam = [(id_set,sys.argv[2], "remained_reduced_R1.fastq"),(id_set, sys.argv[3], "remained_reduced_R2.fastq")]
+        pool.starmap(removee_by_ID,lparam)
+
+def removee_by_ID(id_set,readfile,outfile):
+    remained_reads = []
+    with open(readfile,"r") as r1f:
+        while True:
+            block = list(its.islice(r1f, 4))
+
+            if not block:
+                break
+            tmpid = re.sub('@','',block[0].split(" ")[0])
+            #print(tmpid)
+            if tmpid in id_set:
+                continue
+            remained_reads.append(block)
+    print(len(remained_reads),"reads remained")
+    with open(outfile,"w+") as r1of:
+        for lines in remained_reads:
+            for line in lines:
+                r1of.write(line)
+
 def get_contigs():
     with open(sys.argv[1],"r") as f:
         for lines in iter(lambda: list(its.islice(f,2)),[]):
@@ -881,10 +917,11 @@ if __name__ == "__main__":
     #fix_ID()
     #get_ori_half()
     #get_contigs()
-    get_rev_comp(True)
+    #get_rev_comp(True)
     #get_read_from_listf()
     #rev_comp_read()
 
+    remove_ID_fastq()
 
     corenum = mp.cpu_count()-2
     line_amount = 245216120
