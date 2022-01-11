@@ -814,10 +814,10 @@ def remove_ID_fastq():
     print(id_set)
     #exit(1)
     with mp.Pool(2) as pool:
-        lparam = [(id_set,sys.argv[2], "remained_reduced_R1.fastq"),(id_set, sys.argv[3], "remained_reduced_R2.fastq")]
-        pool.starmap(removee_by_ID,lparam)
+        lparam = [(id_set,sys.argv[2], sys.argv[4]+"remained_reduced_R1.fastq"),(id_set, sys.argv[3],sys.argv[4]+ "remained_reduced_R2.fastq")]
+        pool.starmap(remove_by_ID,lparam)
 
-def removee_by_ID(id_set,readfile,outfile):
+def remove_by_ID(id_set,readfile,outfile):
     remained_reads = []
     with open(readfile,"r") as r1f:
         while True:
@@ -877,22 +877,77 @@ def get_rev_comp(revcomp=False):
     with open("rev_comp_"+sys.argv[1],"w+") as f2:
         f2.write(">reverse_complement_of_"+sys.argv[1]+"\n")
         f2.write(seq_rev_comp)
-def rev_comp_read():
+def rev_comp_read(seq):
+    seq_revc = seq.upper()[::-1]
+    seq_revc = seq_revc.replace('A', 't')
+    seq_revc = seq_revc.replace('T', 'a')
+    seq_revc = seq_revc.replace('C', 'g')
+    seq_revc = seq_revc.replace('G', 'c')
+    seq_rev_comp = seq_revc.upper()
+    return seq_rev_comp
+def fastq_rev_comp():
     count = 1
     with open(sys.argv[1], "r") as f1,open("rev_comp_"+os.path.basename(sys.argv[1]),"w+") as f2:
         for line in f1:
             if count % 2 == 0:
                 seq = line.strip()
-                seq_revc = seq.upper()[::-1]
-                seq_revc = seq_revc.replace('A', 't')
-                seq_revc = seq_revc.replace('T', 'a')
-                seq_revc = seq_revc.replace('C', 'g')
-                seq_revc = seq_revc.replace('G', 'c')
-                seq_rev_comp = seq_revc.upper()
-                f2.write(seq_rev_comp+"\n")
+
+                f2.write(rev_comp_read(seq)+"\n")
             else:
                 f2.write(line)
             count += 1
+def dup_read_by_ID():
+    ID_list = []
+    with open(sys.argv[1], "r") as trf:
+        for line in trf:
+            ID_list.extend(line.split(" "))
+    if len(ID_list) == 0:
+        print("no reads to be removed")
+        exit(2)
+    id_set = set(ID_list)
+    id_set.remove("")
+    print(id_set)
+    read_set = set({})
+    rc_read_set = set({})
+    dup_read_IDs = {}
+    rc_dup_read_IDs = {}
+    with open(sys.argv[2],"r") as rnf:
+        for line in rnf:
+            fields = line.split(" ")
+            if fields[0] in id_set:
+                flag = format(fields[1].strip(),'b')
+                if flag[4] == "1":
+                    rc_read_set.add(rev_comp_read(fields[3].strip()))
+                    rc_dup_read_IDs.update({rev_comp_read(fields[3].strip()): {line.split(" ")[0].strip()}})
+                else:
+                    read_set.add(fields[3].strip())
+                    dup_read_IDs.update({fields[3].strip(): {line.split(" ")[0].strip()}})
+    with mp.Pool(2) as pool:
+        lparam = [(read_set,dup_read_IDs,sys.argv[2], "dup_reads_R1.txt"),(read_set,dup_read_IDs, sys.argv[3], "dup_reads_R2.txt")]
+        pool.starmap(search_by_read,lparam)
+
+def search_by_read(read_set,dup_read_IDs, readfile,outfile):
+
+    with open(readfile,"r") as r1f:
+        while True:
+            block = list(its.islice(r1f, 4))
+
+            if not block:
+                break
+            tmpid = re.sub('@','',block[0].split(" ")[0])
+            tmpread = block[1].strip()
+            #print(tmpid)
+            if tmpread not in read_set:
+                continue
+            dup_read_IDs[tmpread].add(tmpid)
+    #print(len(remained_reads),"reads remained")
+    #return dup_read_IDs
+        with open(outfile,"w+") as r1of:
+            for lines in dup_read_IDs:
+                for line in lines:
+                    r1of.write(line)
+
+
 if __name__ == "__main__":
     # hash_str()
     #count_match()

@@ -9,9 +9,9 @@ import re
 import argparse
 import json
 import build_matrix as bm
-
+import copy
 #import matplotlib; matplotlib.use("Qt5Agg")
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from typing import Counter
 
 
@@ -34,6 +34,7 @@ def get_arguments():
 	parser.add_argument("--round", type=int, default=1)
 	parser.add_argument("--excluded_IDs", type=str, default="excluded_IDs.txt")
 	parser.add_argument("--find_sub",type=str,default="no")
+	parser.add_argument("--bubble_mode",type=str,default="False")
 	return parser.parse_args()
 
 
@@ -94,6 +95,11 @@ if __name__ == "__main__":
 		first_round = True
 	else:
 		first_round = False
+	if args.bubble_mode == "True":
+		bubble_mode = True
+	else:
+		bubble_mode = False
+
 	row_l = []
 	col_l = []
 	val_l = []
@@ -124,12 +130,20 @@ if __name__ == "__main__":
 
 	initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True)
 	prev_time = time.time()
-	real_narrowed,paired_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read,out_dir)
+	real_narrowed,paired_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read,out_dir,read_list)
 	#del initial_matrix_info
 	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id)
+	intermit_matrix_info.real_narrowed_read = copy.deepcopy(intermit_matrix_info.narrowed_read)
+	intermit_matrix_info.narrowed_read = copy.deepcopy(initial_matrix_info.narrowed_read)
 	intermit_matrix_info.narrowed_matrix = initial_matrix_info.real_narrowed_matrix.copy()
+
+	assert intermit_matrix_info.real_narrowed_matrix.shape[1] == intermit_matrix_info.narrowed_matrix.shape[1]
+	print("narrowed_reads",len(intermit_matrix_info.narrowed_read), "real narrowed", len(intermit_matrix_info.real_narrowed_read))
+	print("narrowed_shape", intermit_matrix_info.narrowed_matrix.shape, "real narrowed shaoe", intermit_matrix_info.real_narrowed_matrix.shape)
+
+
+
 	del initial_matrix_info
-	assert intermit_matrix_info.narrowed_matrix.shape[1] == intermit_matrix_info.narrowed_matrix.shape[1]
 	#print(intermit_matrix_info.narrowed_matrix.shape[1], intermit_matrix_info.real_narrowed_matrix.shape[1])
 
 	maxposition = intermit_matrix_info.max_shape[1]
@@ -218,93 +232,129 @@ if __name__ == "__main__":
 	read_lab_num = 0
 
 	# --------------------get cvg-------------------
-	i = 0
-	narrowed_cvg_list = []
-	real_narrowed_cvg_list = []
-	bubbles = {}
-	n_min = (0,100000)
-	rn_min = 100000
-	rn_min_index= -1
-	for i in range(0, intermit_matrix_info.real_narrowed_matrix.shape[1]):
-		tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
-		tmp_count = np.bincount(tmp)[1:]
-		real_narrowed_cvg_list.append(sum(tmp_count))
-		if rn_min > sum(tmp_count) > 0:
-			rn_min = sum(tmp_count)
-			rn_min_index = i
-		tmp1 = np.squeeze(intermit_matrix_info.narrowed_matrix.getcol(i).toarray())
-		tmp_count1 = np.bincount(tmp1)[1:]
-		narrowed_cvg_list.append(sum(tmp_count1))
-		if n_min[1] > sum(tmp_count1) > 0:
-			n_min = (i,sum(tmp_count1))
-		bub = narrowed_cvg_list[-1]-real_narrowed_cvg_list[-1]
-		if bub > 0:
+	if bubble_mode:
+		i = 0
+		narrowed_cvg_list = []
+		real_narrowed_cvg_list = []
+		bubbles = {}
+		n_min = (0,100000)
+		rn_min = 100000
+		rn_min_index= -1
+		for i in range(0, intermit_matrix_info.real_narrowed_matrix.shape[1]):
+			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
+			tmp_count = np.bincount(tmp)[1:]
+			real_narrowed_cvg_list.append(sum(tmp_count))
+			if i in range(21562,25384) and rn_min > sum(tmp_count) > 0:
+				rn_min = sum(tmp_count)
+				rn_min_index = i
+			tmp1 = np.squeeze(intermit_matrix_info.narrowed_matrix.getcol(i).toarray())
+			tmp_count1 = np.bincount(tmp1)[1:]
+			narrowed_cvg_list.append(sum(tmp_count1))
+			if i in range(21562,25384) and n_min[1] > sum(tmp_count1) > 0:
+				n_min = (i,sum(tmp_count1))
+			bub = narrowed_cvg_list[-1]-real_narrowed_cvg_list[-1]
+
 			bubbles.update({i: bub})
-	rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_min_index).toarray())
-	n_tmp = np.squeeze(intermit_matrix_info.narrowed_matrix.getcol(rn_min_index).toarray())
-	thin_readnum = np.nonzero(rn_tmp)[0]
-	thinread_list=[]
-	thinread_list.extend(bm.marking(list(thin_readnum),rn_min,intermit_matrix_info.narrowed_read))
-	print(rn_min,n_min)
-	print(len(narrowed_cvg_list),len(narrowed_cvg_list))
-	thinread_set = set(thinread_list)
-	with open("thin_segments_reads_IDs.txt","w+") as tf:
-		for tr in thinread_set:
-			tf.write(tr+" ")
-	print(len(thinread_set)," read IDs excluded before assemble again")
+		print(rn_min,rn_min_index,n_min)
+		sg_range = list(range(rn_min_index-50,rn_min_index+50))
+		thinread_list = []
+		thincol = []
+		for rn_i in sg_range:
+			rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_i).toarray())
+			n_tmp = np.squeeze(intermit_matrix_info.narrowed_matrix.getcol(rn_i).toarray())
+			print("rn sg-i", np.bincount(rn_tmp)[1:])
+			print("n sg-i",np.bincount(n_tmp)[1:])
+			thin_readnum = np.nonzero(rn_tmp)[0]
 
-	bubble_list=[v for v in bubbles.values()]
-	print(statistics.median(bubble_list), statistics.median(bubble_list),max(bubble_list))
-	with open("real_narrowed_cvg.txt","w+") as rnf, open("narrowed_cvg.txt","w+") as nf, open("bubbles.txt","w+") as bf:
-		del i
-		for i in range(len(bubble_list)):
-			rnf.write(str(i)+":"+str(real_narrowed_cvg_list[i])+" ")
-			nf.write(str(i) + ":" + str(narrowed_cvg_list[i]) + " ")
-			bf.write(str(i) + ":" + str(bubble_list[i]) + " ")
-	# ----------------------plotting bubbles----------
-	x = np.asarray([k for k in bubbles.keys()])
-	y = np.asarray([v for v in bubbles.values()])
-	px = 1 / plt.rcParams['figure.dpi']
-	#fig, ax = plt.subplots(figsize=(9000 * px, 900 * px))
-	fig = plt.figure(figsize=(100,10))
-	print(y)
-	print(x)
-	plt.bar(x, y, align='center')
-	plt.xticks(x)
-	plt.xlabel('position')
-	plt.ylabel('bubble size')
-	#ax.set(xlim=[3800, 20])
+			#real_before = copy.deepcopy(intermit_matrix_info.real_narrowed_read)
+			tmp_thinread_list,intermit_matrix_info.real_narrowed_read = bm.marking(list(thin_readnum),rn_min,intermit_matrix_info.real_narrowed_read)
 
-	plt.xlim(0, 3800)
-	plt.ylim(0 ,80)
-
-	# plt.xticks([x for x in range(100,153)])
-	# ax.xaxis.set_tick_params(width=5)
-	# fig, axs = plt.subplots(1,2, sharey=True, tight_layout=True)
-	#plt.figure(figsize=(4000,200),dpi=20)
-	print(fig)
-	# axs[0].hist(x, bins=20)
-	# axs[1].hist(y,bins=20)
-	#plt.show()
-
-	# cvg = statistics.median(cvg_list)
-	#cvg_count = Counter(cvg_list)
-	#s_cvg_list = sorted(cvg_list)
-	#cvg = s_cvg_list[int(0.25 * len(cvg_list))]
-	#cvg = s_cvg_list[0]
-	#if cvg == 0:
-	#	cvg = 1
+			#test_thinread_set, test_narrowed_read = bm.marking_byid(list(thin_readnum),rn_min,real_before,set({}))
 
 
-	#print("cvg is set to ", cvg, "medium coverage", statistics.median(cvg_list), "minimum", mini, "average ",
-	#	  statistics.mean(cvg_list))
-	#print({k: v for k, v in sorted(cvg_count.items(), key=lambda x: x[0])})
+			whole_col = np.nonzero(n_tmp)[0]
+
+			tmp_thincol,intermit_matrix_info.narrowed_read = bm.marking(list(whole_col),sum(np.bincount(n_tmp)[1:]),intermit_matrix_info.narrowed_read)
+
+			thinread_list.extend(tmp_thinread_list)
+			thincol.extend(tmp_thincol)
+			print(len(whole_col), len(thin_readnum))
+		thinread_set = set(thinread_list)
+		print(len(set(thincol)),len(thinread_set)," read IDs excluded before assemble again")
+
+		with open("thin_segments_reads_IDs.txt","w+") as tf:
+			#for rn_num in thin_readnum:
+			#	tri = intermit_matrix_info.real_narrowed_read[rn_num]
+			#	tf.write(tri[0]+" "+str(tri[1])+" "+str(tri[2])+" "+tri[3]+"\n")
+			for tr in thinread_set:
+				tf.write(tr+" ")
+		print(set(thincol)-thinread_set)
+		with open("thin_column_reads_ID.txt","w+") as tcf:
+			#for n_num in whole_col:
+			#	tcri = intermit_matrix_info.narrowed_read[n_num]
+				#if tcri[0] not in thinread_set:
+			#	tcf.write(tcri[0]+" "+str(tcri[1])+" "+str(tcri[2])+" "+tcri[3]+"\n")
+			for tcr in thincol:
+				if tcr not in thinread_set:
+					tcf.write(tcr+" ")
+
+		bubble_list=[v for v in bubbles.values()]
+		print(len(bubble_list),len(narrowed_cvg_list),len(narrowed_cvg_list))
+		print(statistics.median(bubble_list), statistics.median(bubble_list),max(bubble_list))
+		with open("real_narrowed_cvg.txt","w+") as rnf, open("narrowed_cvg.txt","w+") as nf, open("bubbles.txt","w+") as bf:
+			del i
+			for i in range(len(bubble_list)):
+				rnf.write(str(i)+":"+str(real_narrowed_cvg_list[i])+" ")
+				nf.write(str(i) + ":" + str(narrowed_cvg_list[i]) + " ")
+				bf.write(str(i) + ":" + str(bubble_list[i]) + " ")
+
+		exit()
+		# ----------------------plotting bubbles----------
+		'''x = np.asarray([k for k in bubbles.keys()])
+		y = np.asarray([v for v in bubbles.values()])
+		px = 1 / plt.rcParams['figure.dpi']
+		#fig, ax = plt.subplots(figsize=(9000 * px, 900 * px))
+		fig = plt.figure(figsize=(100,10))
+		print(y)
+		print(x)
+		plt.bar(x, y, align='center')
+		plt.xticks(x)
+		plt.xlabel('position')
+		plt.ylabel('bubble size')
+		#ax.set(xlim=[3800, 20])
+	
+		plt.xlim(0, 3800)
+		plt.ylim(0 ,80)
+	
+		# plt.xticks([x for x in range(100,153)])
+		# ax.xaxis.set_tick_params(width=5)
+		# fig, axs = plt.subplots(1,2, sharey=True, tight_layout=True)
+		#plt.figure(figsize=(4000,200),dpi=20)
+		print(fig)
+		# axs[0].hist(x, bins=20)
+		# axs[1].hist(y,bins=20)
+		plt.show()'''
+	else:
+
+		# cvg = statistics.median(cvg_list)
+		#cvg_count = Counter(cvg_list)
+		#s_cvg_list = sorted(cvg_list)
+		#cvg = s_cvg_list[int(0.25 * len(cvg_list))]
+		#cvg = s_cvg_list[0]
+		#if cvg == 0:
+		#	cvg = 1
+		cvg = 1
+
+		#print("cvg is set to ", cvg, "medium coverage", statistics.median(cvg_list), "minimum", mini, "average ",
+		#	  statistics.mean(cvg_list))
+		#print({k: v for k, v in sorted(cvg_count.items(), key=lambda x: x[0])})
 
 
 
-	exit()
+
 	# -------------------------compute probabilities of each base
 	# count unknow bases in the updated sequence
+
 
 	non_update = 0
 	insufficient = []
@@ -366,8 +416,8 @@ if __name__ == "__main__":
 			continue
 		else:
 			covered_reads = list(np.nonzero(tmp)[0])
-
-			marked_id_list.extend(bm.marking(covered_reads, cvg, intermit_matrix_info.narrowed_read))
+			tmp_marked,intermit_matrix_info.real_narrowed_read =bm.marking(covered_reads, cvg, intermit_matrix_info.real_narrowed_read)
+			marked_id_list.extend(tmp_marked)
 
 			nonzero_num = np.nonzero(tmp_count)[0].shape[0]
 			max_l = np.argmax(tmp_count)

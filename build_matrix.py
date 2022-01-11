@@ -1,3 +1,4 @@
+import copy
 import os,random,time,sys
 import multiprocessing as mp
 import pandas as pd
@@ -22,6 +23,8 @@ class Matrix_info:
 	insertion_reads: dict
 	marked_id: set
 	#read_list : list
+
+	real_narrowed_read : list = field(default="")
 	maxposition: int = field(default=-1)
 	insertion_columns_list: list = field(default="")
 	possible_insert: list = field(default="")
@@ -50,7 +53,6 @@ markbit = 5
 
 def read_sam(R_file):
 
-	global read_list
 
 	r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
 	read_number=r.shape[0]
@@ -64,7 +66,7 @@ def read_sam(R_file):
 	return read_list
 
 
-def matrix_from_readlist(read_list, match_limit, marked_id, initial=False):
+def matrix_from_readlist(all_read, match_limit, marked_id, initial=False):
 	#global narrowed_read,maxposition, read_number,row,val,col
 
 
@@ -84,9 +86,9 @@ def matrix_from_readlist(read_list, match_limit, marked_id, initial=False):
 	# relocated seq to matrix A
 	included_i = 0
 
-	for i in range(len(read_list)):
+	for i in range(len(all_read)):
 		exclude = False
-		iread = read_list[i]
+		iread = all_read[i]
 
 		index = iread[2]-1
 
@@ -167,11 +169,11 @@ def matrix_from_readlist(read_list, match_limit, marked_id, initial=False):
 
 					if i in insertion_reads.keys():
 
-						newinsert = insertion_reads.get(included_i).copy()
+						newinsert = copy.deepcopy(insertion_reads.get(included_i))
 						newinsert.append((index + begin, inserts))
-						insertion_reads.update({included_i: newinsert.copy()})
+						insertion_reads.update({included_i: newinsert})
 					else:
-						insertion_reads.update({included_i: [(index + begin, inserts.copy())]})
+						insertion_reads.update({included_i: [(index + begin, copy.deepcopy(inserts))]})
 				begin = blk_pos[c]
 				inserts = []
 
@@ -197,6 +199,7 @@ def matrix_from_readlist(read_list, match_limit, marked_id, initial=False):
 		else:
 			pad = len(sam_q_num) - read_length
 		'''
+
 		val_l.extend(sam_q_num)
 		row_tmp = [int(included_i) for n in range(tmp_length)]
 		row_l.extend(row_tmp)
@@ -226,12 +229,13 @@ def matrix_from_readlist(read_list, match_limit, marked_id, initial=False):
 
 	info_collection = Matrix_info(max_shape=(included_i, maxposition+extra_col_possible),
 								  row=np.array(row_l),col=np.array(col_l),val= np.array(val_l),
-								  narrowed_read=narrowed.copy(),insertion_reads=insertion_reads,
+								  narrowed_read=narrowed,insertion_reads=insertion_reads,
 								  marked_id=marked_id)
 	csc = sp.coo_matrix((info_collection.val, (info_collection.row, info_collection.col))).tocsc()  # matrix
 	print("max position at",info_collection.maxposition, info_collection.col[-1],maxindex)
 	print("insertion_reads", len(insertion_reads))
 	info_collection.real_narrowed_matrix = csc.copy()
+
 
 #	if initial:
 #		narrowed_read = narrowed.copy()
@@ -398,7 +402,7 @@ def build_insertion(intermit_matrix_info, count_threshold):
 	intermit_matrix_info.insertion_columns_list = insertion_columns_list
 	return intermit_matrix_info
 
-def narrow_reads(ref, narrowed_read, out_dir):
+def narrow_reads(ref, narrowed_read, out_dir, all_read):
 	#global narrowed_read,  half_real_reads, half_real_ID
 
 	ID_count = {}
@@ -419,10 +423,14 @@ def narrow_reads(ref, narrowed_read, out_dir):
 		exit(-4)
 	ID_count.clear()
 	#'''
-
+	loc_pair_narrowed = {}
+	loc_pair_real_narrowed = {}
+	loc_pair_paired_real_narrowed ={}
 	print(len(narrowed_read), " 100% M reads in narrowed_extract.sam")
+	count = 0
 	with open(out_dir+"narrowed_extract.sam", "w+") as nf1:
 		for line in narrowed_read:
+
 			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 
 
@@ -438,7 +446,7 @@ def narrow_reads(ref, narrowed_read, out_dir):
 			true_total_match.append(rl)
 			half_real_ID.add(rl[0])
 
-	narrowed_read = true_total_match.copy()
+	narrowed_read = true_total_match
 	print(len(true_total_match), " truely matched reads in real_narrowed_extract.sam")
 
 	with open(out_dir+"real_narrowed_extract.sam", "w+") as nf1:
@@ -447,7 +455,7 @@ def narrow_reads(ref, narrowed_read, out_dir):
 
 	print(len(half_real_ID)*2," in paired_half_real_narrowed_extract.sam")
 	with open(out_dir+"paired_half_real_narrowed_extract.sam", "w+") as hnf:
-		for line in read_list:
+		for line in all_read:
 			if line[0] in half_real_ID:
 				half_real_reads.append(line)
 				hnf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
@@ -478,35 +486,75 @@ def narrow_reads(ref, narrowed_read, out_dir):
 		print("no read satisfies condition, exiting")
 		exit(-2)
 
-	return true_total_match, mated
+	return (true_total_match, mated)
 
 
 
 def marking(read_num, cvg,narrowed_read, col=0):
 	#global marked_id,narrowed_read, marked_row_num
+
 	marked_id_list = []
 	if len(read_num) == 0:
-		return marked_id_list
+		return marked_id_list,narrowed_read
 
 	marked = 0
 	for i in reversed(read_num):
+
 		if narrowed_read[i][markbit]:
 			marked += 1
 		if marked >= cvg:
-			return marked_id_list
+
+			return marked_id_list,narrowed_read
+
 	#print(marked,col, read_num)
 	#marked_id = set({})
-
 	for j in reversed(read_num):
+
 		if not narrowed_read[j][markbit]:
 			narrowed_read[j][markbit] = True
-			marked += 1
+
 			#marked_id.add(narrowed_read[j][0])
 			#marked_row_num.append(j)
 			marked_id_list.append(narrowed_read[j][0])
+
 			if marked == cvg:
-				return marked_id_list
-	return marked_id_list
+				return marked_id_list,narrowed_read
+
+			marked += 1
+	return marked_id_list, narrowed_read
+
+def marking_byid(read_num, cvg,narrowed_read ,marked_id, col=0):
+	#global marked_id,narrowed_read, marked_row_num
+
+
+	if len(read_num) == 0:
+		return marked_id
+
+	marked = 0
+	for i in reversed(read_num):
+
+		if narrowed_read[i][0] in marked_id:
+			marked += 1
+		if marked >= cvg:
+
+			return marked_id,narrowed_read
+
+	#print(marked,col, read_num)
+	#marked_id = set({})
+	for j in reversed(read_num):
+
+		if narrowed_read[j][0] not in marked_id:
+			#narrowed_read[j][markbit] = True
+
+			#marked_id.add(narrowed_read[j][0])
+			#marked_row_num.append(j)
+			marked_id.add(narrowed_read[j][0])
+
+			if marked == cvg:
+				return marked_id,narrowed_read
+
+			marked += 1
+	return marked_id, narrowed_read
 
 
 
