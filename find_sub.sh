@@ -325,10 +325,10 @@ for i in {1..1};do
     fi
 
     if [ -e "$read1" ] && [ -e "$read2" ]; then
-        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=yes;
+        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True --bubble_mode=no;
     else
 
-       python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read" --round="$i" --excluded_IDs="excluded_IDs.txt" ;
+       python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
     fi
     err=$?
 
@@ -343,7 +343,9 @@ for i in {1..1};do
     fi
     subamount=$(wc -l "$out_dir"/paired_real_narrowed_extract.sam)
     echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
-
+    cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
+    cp real_narrowed_cvg.txt "$out_dir"/
+    cp thin_* "$out_dir"/
 
 
 #    "${DIR}"/megahit/build/megahit -1 "$out_dir"/half_real_R1.fastq -2 "$out_dir"/half_real_R2.fastq -o "$contig_dir"

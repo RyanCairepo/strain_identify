@@ -2,7 +2,7 @@ import os
 import random
 import sys, re, statistics, itertools as its, multiprocessing as mp, numpy as np, scipy.sparse as sp, matplotlib.pyplot as pit
 from typing import Counter
-
+import  argparse,math
 import editdistance
 import matplotlib.pyplot as plt
 
@@ -460,18 +460,18 @@ def count_length():
     #axs[1].hist(y,bins=20)
     plt.show()
 
-def getoverlap():
+def getoverlap(f1,f2):
     read_set1 = {}
     overlapped = {}
     read_set2 = {}
-    with open(sys.argv[1], "r") as f1:
+    with open(f1, "r") as f1:
         for line in f1:
             sl = line.split(" ")
             if sl[0] not in read_set1.keys():
                 read_set1.update({sl[0]: {sl[3]}})
             else:
                 read_set1[sl[0]].add(sl[3])
-    with open(sys.argv[2], "r") as f2:
+    with open(f2, "r") as f2:
         for line in f2:
             sl = line.split(" ")
             if sl[0] not in read_set2.keys():
@@ -484,8 +484,15 @@ def getoverlap():
             if len(read_set1[rid].intersection(read_set2[rid]))>1:
                 overlapped.update({rid:read_set1[rid].intersection(read_set2[rid])})
 
-    print(len(overlapped.keys()), "reads ID overlapped ", len(read_set1.keys()), " unique read ID in ", sys.argv[1], " and ",len(read_set2.keys()),
-          " in ", sys.argv[2])
+    print(len(overlapped.keys()), "reads ID overlapped ", len(read_set1.keys()), " unique read ID in ", f1, " and ",len(read_set2.keys()),
+          " in ", f2)
+    overlap_ids=set(read_set1.keys()).intersection(set(read_set2.keys()))
+    print(len(read_set1),len(read_set2))
+    print(len(overlap_ids),overlap_ids)
+    exit()
+    with open("overlap_ids.txt","w+")as wf:
+        for ri in overlap_ids:
+            wf.write(ri+",")
     #for k in overlapped.keys():
     #    print()
 def get_sam_dup():
@@ -754,25 +761,28 @@ def get_read_from_listf():
         pool.starmap(search_ID,lparam)
 def get_ori_half():
     IDs = set({})
-    if not re.match('.*\.sam',sys.argv[1]) or not re.match('.*\.fastq',sys.argv[2]) or not re.match('.*\.fastq',sys.argv[3]):
-       print("accept sam as first arg")
-       exit(1)
+ #   if not re.match('.*\.sam',sys.argv[1]) or not re.match('.*\.fastq',sys.argv[2]) or not re.match('.*\.fastq',sys.argv[3]):
+ #      print("accept sam as first arg")
+ #      exit(1)
     with open(sys.argv[1],"r") as f:
         for line in f:
-            IDs.add(line.split(" ")[0])
+            print(len(line.split(" ")),"IDs counted")
+            IDs.update(line.split(" "))
     #print(IDs)
     print("getting", len(IDs) ," IDs of reads from "+sys.argv[2]+" and "+sys.argv[3])
     if len(sys.argv) < 4:
         print("get_ori_read() insufficient args")
         exit(2)
     with mp.Pool(2) as pool:
-        lparam = [(IDs,sys.argv[2], "half_real_R1.fastq"),(IDs, sys.argv[3], "half_real_R2.fastq")]
+        lparam = [(IDs,sys.argv[2], sys.argv[4]+"half_real_R1.fastq"),(IDs, sys.argv[3], sys.argv[4]+"half_real_R2.fastq")]
         pool.starmap(search_ID,lparam)
 
 
 
 def search_ID(id_set,readfile,outfile):
     ori_reads = []
+    count = 0
+    con_count = 0
     with open(readfile,"r") as r1:
         '''
         for block in iter(lambda: list(its.islice(r1,4)),[]):
@@ -782,18 +792,20 @@ def search_ID(id_set,readfile,outfile):
                 continue
             ori_reads.append(block)
             '''
+
         while True:
             block = list(its.islice(r1, 4))
-
+            count += 1
             if not block:
                 break
             tmpid = re.sub('@','',block[0].split(" ")[0])
             #print(tmpid)
             if tmpid not in id_set:
+                con_count += 1
                 continue
             ori_reads.append(block)
 
-
+    print(count*4,"lines accessed",con_count*4,"reads skipped",len(ori_reads),"reads to write")
 
     with open(outfile, "w+") as wr1:
         for lines in ori_reads:
@@ -847,8 +859,9 @@ def get_contigs():
                     wf.write(line)
 
 
-def get_rev_comp(revcomp=False):
-    with open(sys.argv[1], "r") as f1:
+def get_rev_comp(input_file,revcomp=False):
+    print("getting reverse complement of ",input_file)
+    with open(input_file, "r") as f1:
 
         seq1 = f1.read()
         if seq1[0] == ">":
@@ -874,8 +887,8 @@ def get_rev_comp(revcomp=False):
     seq_revc = seq_revc.replace('C', 'g')
     seq_revc = seq_revc.replace('G', 'c')
     seq_rev_comp = seq_revc.upper()
-    with open("rev_comp_"+sys.argv[1],"w+") as f2:
-        f2.write(">reverse_complement_of_"+sys.argv[1]+"\n")
+    with open("rev_comp_"+os.path.basename(input_file),"w+") as f2:
+        f2.write(">reverse_complement_of_"+input_file+"\n")
         f2.write(seq_rev_comp)
 def rev_comp_read(seq):
     seq_revc = seq.upper()[::-1]
@@ -915,7 +928,7 @@ def dup_read_by_ID():
         for line in rnf:
             fields = line.split(" ")
             if fields[0] in id_set:
-                flag = format(fields[1].strip(),'b')
+                flag = format(fields[1].strip(),'b')[::-1]
                 if flag[4] == "1":
                     rc_read_set.add(rev_comp_read(fields[3].strip()))
                     rc_dup_read_IDs.update({rev_comp_read(fields[3].strip()): {line.split(" ")[0].strip()}})
@@ -946,15 +959,53 @@ def search_by_read(read_set,dup_read_IDs, readfile,outfile):
             for lines in dup_read_IDs:
                 for line in lines:
                     r1of.write(line)
+def split_seq(input_file,length=9050,step=1000):
+    seq = ""
+    with open(input_file,"r") as f:
+        for line in f:
+            if line[0] != ">":
+                seq += line.strip()
+    for i in range(0,len(seq)-length,step):
+        with open("slice_"+str(i)+"_"+str(i+length)+"_"+ os.path.basename(input_file),"w+") as wf:
+            wf.write(">index"+str(i)+"_"+str(i+length)+"\n")
+            wf.write(seq[i:i+length])
 
-
+def count_pair_dist(input_file):
+    dist = {}
+    with open(input_file,"r") as f:
+        for line in f:
+            sl = line.split(" ")
+            if sl[0] in dist.keys():
+                dist[sl[0]].append(int(sl[2]))
+            else:
+                dist.update({sl[0]:[int(sl[2])]})
+    dist_values = []
+    for i in dist.keys():
+        dist_values.append(abs(dist[i][0]-dist[i][1]))
+    dist_val_count = Counter(dist_values)
+    print(len(dist_values),len(dist),dist_val_count, max([x for x in dist_val_count.values()]))
+    print(statistics.mean(dist_values),statistics.median(dist_values))
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="some tool functions",usage='%(prog)s [options]'+str(sys.argv))
+    parser.add_argument('--rev_comp',type=str,default="no")
+    parser.add_argument("--remove_by_ID",type=str,default="no")
+    parser.add_argument("files",type=str,default="",nargs="+")
+    parser.add_argument("--split_seq",type=str,default="no")
+    parser.add_argument("--pair_dist", type=str,default="no")
+    parser.add_argument("--overlap_id",type=str,default="no")
+    args = parser.parse_args()
+
+    input_files = args.files
+    print(input_files[1:])
     # hash_str()
     #count_match()
     #countdiff()
     #count_record()
     #oneline_fasta()
-    #getoverlap()
+    if args.overlap_id != "no":
+
+        getoverlap(input_files[1],input_files[2])
     #get_sam_dup()
 
     #adjustindex(377)
@@ -972,11 +1023,16 @@ if __name__ == "__main__":
     #fix_ID()
     #get_ori_half()
     #get_contigs()
-    #get_rev_comp(True)
+    if args.rev_comp != "no":
+        get_rev_comp(input_files[1],True)
     #get_read_from_listf()
     #rev_comp_read()
-
-    remove_ID_fastq()
+    if args.remove_by_ID != "no":
+        remove_ID_fastq()
+    if args.split_seq != "no":
+        split_seq(input_files[1],length=2949,step=300)
+    if args.pair_dist != "no":
+        count_pair_dist(input_files[1])
 
     corenum = mp.cpu_count()-2
     line_amount = 245216120
