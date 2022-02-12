@@ -460,7 +460,7 @@ def build_insertion(intermit_matrix_info, count_threshold):
 	return intermit_matrix_info
 
 
-def narrow_reads(ref, narrowed_read, out_dir, all_read):
+def narrow_reads(ref, narrowed_read, out_dir, brute_forece=True):
 	# global narrowed_read,  half_real_reads, half_real_ID
 
 	ID_count = {}
@@ -486,15 +486,11 @@ def narrow_reads(ref, narrowed_read, out_dir, all_read):
 	loc_pair_paired_real_narrowed = {}
 	print(len(narrowed_read), " 100% M reads in narrowed_extract.sam")
 	count = 0
-	with open(out_dir + "narrowed_extract.sam", "w+") as nf1:
-		for line in narrowed_read:
-			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-
 	half_real_ID = set({})
 	# half_real_reads = []
 	nearly_true_total = []
 	true_total_match = []
-	for rl in narrowed_read:
+	for ri,rl in enumerate(narrowed_read):
 		# print(mate_rl)
 		index = rl[2] - 1
 		# print(len(ref[index:index + len(mate_rl[3])]),len(mate_rl[3]),end=" | ")
@@ -503,9 +499,10 @@ def narrow_reads(ref, narrowed_read, out_dir, all_read):
 			true_total_match.append(rl)
 		# half_real_ID.add(rl[0])
 		else:
-			nearly_true_total.append(rl)
+			nearly_true_total.append(copy.deepcopy(rl))
+			narrowed_read[ri][4] = rl[4]+"*"
 
-	narrowed_read = true_total_match
+
 	print(len(true_total_match), " truely matched reads in real_narrowed_extract.sam")
 	print(len(nearly_true_total), "nearly real narrowed reads in nearly_narrowed_extract.sam")
 	with open(out_dir + "real_narrowed_extract.sam", "w+") as nf1:
@@ -514,6 +511,12 @@ def narrow_reads(ref, narrowed_read, out_dir, all_read):
 	with open(out_dir + "nearly_real_narrowed_extract.sam", "w+") as nrnf:
 		for line in nearly_true_total:
 			nrnf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+	with open(out_dir + "narrowed_extract.sam", "w+") as nf1:
+		for line in narrowed_read:
+			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+
+
+	narrowed_read = true_total_match
 	'''print(len(half_real_ID)*2," in paired_half_real_narrowed_extract.sam")
 	with open(out_dir+"paired_half_real_narrowed_extract.sam", "w+") as hnf:
 		for line in all_read:
@@ -547,6 +550,19 @@ def narrow_reads(ref, narrowed_read, out_dir, all_read):
 	if len(mated) == 0:
 		print("no read satisfies condition, exiting")
 		exit(-2)
+
+
+	if brute_forece:
+		real_narrowed_ids = set([x[0] for x in true_total_match])
+		count_nr_narrowed_ids = Counter([x[0] for x in nearly_true_total])
+		potential_mutated_reads = []
+		with open(out_dir + "potential_mutated_extract.sam", "w+") as pmf:
+			for line in nearly_true_total:
+				if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2]) and 13 < line[2] < 29883 :
+					potential_mutated_reads.append(line)
+					pmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+
+		return true_total_match,mated,nearly_true_total,potential_mutated_reads
 
 	return (true_total_match, mated, nearly_true_total)
 
@@ -615,14 +631,20 @@ def marking_byid(read_num, cvg, narrowed_read, marked_id, col=0):
 			marked += 1
 	return marked_id, narrowed_read
 
-def collecting_bubbles(read_num,read_list):
+def collecting_bubbles(read_num,read_list,brute_force=False):
 	collected_reads = []
 	if len(read_num) == 0:
-		return collected_reads
-	for i  in read_num:
-		if not read_list[i][markbit]:
+		print("no reads coverd")
+		return collected_reads, read_list
+
+	for i in read_num:
+		if brute_force:
 			collected_reads.append(read_list[i])
-			read_list[i][markbit] = True
+		else:
+			if not read_list[i][markbit]:
+				collected_reads.append(read_list[i])
+				read_list[i][markbit] = True
+
 	return collected_reads,read_list
 
 def get_bubble_reads(r1_file, r2_file, read_list, out_dir,rc_file):
@@ -741,5 +763,8 @@ def rev_comp_read(seq):
 	seq_revc = seq_revc.replace('G', 'c')
 	seq_rev_comp = seq_revc.upper()
 	return seq_rev_comp
+
+
+
 # def get_half_real_reads():
 #	return half_real_reads

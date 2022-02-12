@@ -1,5 +1,6 @@
 import os
 import random
+import subprocess
 import sys, re, statistics, itertools as its, multiprocessing as mp, numpy as np, scipy.sparse as sp, matplotlib.pyplot as pit
 from typing import Counter
 import  argparse,math
@@ -478,17 +479,26 @@ def getoverlap(f1,f2):
                 read_set2.update({sl[0]: {sl[3]}})
             else:
                 read_set2[sl[0]].add(sl[3])
+    rs2_only = []
     for rid in read_set1.keys():
 
         if rid in read_set2.keys():
-            if len(read_set1[rid].intersection(read_set2[rid]))>1:
-                overlapped.update({rid:read_set1[rid].intersection(read_set2[rid])})
+            if len(read_set1[rid]) >= len(read_set2[rid]):
+                if len(read_set1[rid].intersection(read_set2[rid])) == len(read_set1[rid]) :
+                    overlapped.update({rid:read_set1[rid].intersection(read_set2[rid])})
+                else:
+                    print(read_set1[rid],read_set2[rid])
+            else:
+
+                rs2_only.extend(list(read_set2[rid]))
+
 
     print(len(overlapped.keys()), "reads ID overlapped ", len(read_set1.keys()), " unique read ID in ", f1, " and ",len(read_set2.keys()),
           " in ", f2)
     overlap_ids=set(read_set1.keys()).intersection(set(read_set2.keys()))
     print(len(read_set1),len(read_set2))
-    print(len(overlap_ids),overlap_ids)
+    print(len(overlap_ids))
+    print(len(rs2_only),"reads only in "+f2.name)
     exit()
     with open("overlap_ids.txt","w+")as wf:
         for ri in overlap_ids:
@@ -742,39 +752,39 @@ def check_order():
             for k,v in error_lines:
                 errorf.write(str(k)+str(v))
 
-def get_read_from_listf():
+def get_read_from_listf(id_file,readfile1,readfile2):
     if len(sys.argv) < 4:
         print("short of args")
         exit(-1)
     IDs = set({})
-    with open(sys.argv[1],"r") as f:
+    with open(id_file,"r") as f:
         for line in f:
             #Eline = line.replace("[","")
             #line = line.replace("]","")
             #line = line.replace("'","")
             #line = line.replace(",","")
             IDs = set(line.split(" "))
-    print("getting", len(IDs), " IDs of reads from " + sys.argv[2] + " and " + sys.argv[3])
+    print("getting", len(IDs), " IDs of reads from " + readfile1 + " and " + readfile2)
     #exit(1)
     with mp.Pool(2) as pool:
-        lparam = [(IDs,sys.argv[2], "shi_reduced_R1.fastq"),(IDs, sys.argv[3], "shi_reduced_R2.fastq")]
+        lparam = [(IDs,readfile1, "s_newest_reduced_R1.fastq"),(IDs, readfile2, "s_newest_reduced_R2.fastq")]
         pool.starmap(search_ID,lparam)
-def get_ori_half():
+def get_ori_half(samfile,readfile1,readfile2):
     IDs = set({})
  #   if not re.match('.*\.sam',sys.argv[1]) or not re.match('.*\.fastq',sys.argv[2]) or not re.match('.*\.fastq',sys.argv[3]):
  #      print("accept sam as first arg")
  #      exit(1)
-    with open(sys.argv[1],"r") as f:
+    with open(samfile,"r") as f:
         for line in f:
-            print(len(line.split(" ")),"IDs counted")
-            IDs.update(line.split(" "))
+            #print(len(line.split(" ")),"IDs counted")
+            IDs.add(line.split(" ")[0])
     #print(IDs)
-    print("getting", len(IDs) ," IDs of reads from "+sys.argv[2]+" and "+sys.argv[3])
+    print("getting", len(IDs) ," IDs of reads from "+readfile1+" and "+readfile2)
     if len(sys.argv) < 4:
         print("get_ori_read() insufficient args")
         exit(2)
     with mp.Pool(2) as pool:
-        lparam = [(IDs,sys.argv[2], sys.argv[4]+"half_real_R1.fastq"),(IDs, sys.argv[3], sys.argv[4]+"half_real_R2.fastq")]
+        lparam = [(IDs,readfile1, "half_real_R1.fastq"),(IDs, readfile2, "half_real_R2.fastq")]
         pool.starmap(search_ID,lparam)
 
 
@@ -985,6 +995,280 @@ def count_pair_dist(input_file):
     dist_val_count = Counter(dist_values)
     print(len(dist_values),len(dist),dist_val_count, max([x for x in dist_val_count.values()]))
     print(statistics.mean(dist_values),statistics.median(dist_values))
+
+def test_shell(readfile1,readfile2):
+    verify_sub_command = os.path.dirname(
+        __file__) + "/find_sub.sh" + " " + "-r" + " "  + "oneline_NC045512.2.fasta_output/mt_read_subbed_0.fa" + " " + "-1" + " " + readfile1 + " " + "-2" + " " + readfile2 + " " + "-m" + " " + "tog" + " " + "-a" + " " + "bowtie2" + " " + "-c" + " " + 'True'+ " -d Y"
+    # print(verify_sub_command)
+    # verify_sub_command= shlex.split(verify_sub_command)
+
+    verify_proc = subprocess.Popen(verify_sub_command,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+    # verify_proc = subprocess.run(os.path.dirname(__file__)+" count_error.sh 1 2 3",shell=True,stderr=subprocess.PIPE,stdout=subprocess.PIPE)
+    for line in verify_proc.stdout:
+        print(line,end="")
+    verify_proc.stdout.close()
+    proc_code = verify_proc.wait()
+    if proc_code:
+        raise subprocess.CalledProcessError(proc_code,verify_sub_command)
+    print(verify_proc.args)
+    print(verify_proc.stdout)
+
+def get_gap_reads(ref,strain,samfile ,readfile1,readfile2):
+
+    #strain = 2
+    if strain < 0:
+        print("invalid strain number, error")
+        exit(-2)
+    prev_readset = set({})
+    if strain > 0:
+        for i in range(0,strain):
+            with open("subbed_reads_"+str(0)+".sam","r") as subf:
+                for line in subf:
+                    sline = line.strip().split(" ")
+                    prev_readset.add(sline[3])
+    readlist=[]
+    with open(samfile,"r") as samf:
+        for line in samf:
+            if line.split(" ")[3] not in prev_readset:
+                readlist.append(line.strip().split(" "))
+    ref_seq = ""
+    with open(ref,"r") as rf:
+        for line in rf:
+            if line[0]!=">":
+                ref_seq += line.strip()
+    ref = ref_seq
+
+    for read in readlist:
+        tmp_misP = []
+        read_index = int(read[2])-1
+        for i, base in enumerate(read[3]):
+            if ref[read_index + i] != base :
+                tmp_misP.append(read_index + i)
+        for mp in tmp_misP:
+            read.append((int(mp),ref[mp],read[3][mp-read_index]))
+
+    batch = 0
+
+
+    while len(readlist) > 0:
+        subbed_read = []
+        misPs = []
+        ref = ref_seq
+
+        for batch,read in enumerate(readlist):
+            overlap = False
+            read_index = int(read[2])-1
+            read_misPs = [int(x[0]) for x in read[5:]]
+            if len(subbed_read) == 0:
+                subbed_read.append(read)
+                misPs.extend(read_misPs)
+            else:
+                if read_index > max(misPs) or read_index+len(read[3]) < min(misPs):
+                    subbed_read.append(read)
+                    misPs.extend(read_misPs)
+
+                else:
+                    for mp in misPs:
+                        if read_index <= mp and read_index+len(read[3]) >= mp:
+                            misp_found = False
+                            misp_overlap = False
+                            for r_misp in read[5:]:
+                                if mp == r_misp[0]:
+                                    for tmp_r in subbed_read:
+                                        for subbed_r_misp in tmp_r[5:]:
+                                            if r_misp[0] == subbed_r_misp[0]:
+                                                misp_found = True
+                                                #conflict by another misp
+                                                if r_misp[2] != subbed_r_misp[2]:
+                                                    misp_overlap = True
+                                                    break
+                                if misp_overlap:
+                                    overlap = True
+                                    break
+                            # conflict by ref
+                            if not misp_found:
+                                overlap = True
+                                break
+
+                    if overlap:
+
+                        batch += 1
+                        continue
+                    else:
+                        subbed_read.append(read)
+                        misPs.extend(read_misPs)
+
+            ref = ref[:read_index] + read[3] + ref[read_index + len(read[3]):]
+            with open("batch_" + str(batch) + "_reference.fa", "w+") as bf:
+                bf.write(">batch_" + str(batch) + "\n")
+                bf.write(ref)
+            verify_sub_command = os.path.dirname(
+                __file__) + "/find_sub.sh" + " " + "-r" + " "  +"batch_" + str(
+                batch) + "_reference.fa" + " " + "-1" + " " + readfile1 + " " + "-2" + " " + readfile2 + " " + "-m" + " " + "tog" + " " + "-a" + " " + "bowtie2" + " " + "-c" + " " + 'True' + " -d Y"
+
+            verify_proc = subprocess.run(verify_sub_command,
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
+                                         shell=True)
+            print(verify_proc.stdout.split("\n")[-5:])
+            gap_list = verify_proc.stdout.split("\n")[-3]
+            if gap_list != "no gaps":
+
+                print(gap_list)
+                gap_list = re.sub('[\[\]]', '', gap_list)
+                print(gap_list.split(",")[:-1])
+                print(read)
+                #gap_list = gap_list.split(",")[:-1]
+                ref = ref[:read_index] + ref_seq[read_index:read_index+len(read[3])] + ref[read_index + len(read[3]):]
+                subbed_read.remove(read)
+            else:
+                print(batch,"no gaps for ",subbed_read)
+
+            batch += 1
+        with open("final_strain_" + str(strain) + "_reference.fa", "w+") as bf:
+                bf.write(">final_strain_" + str(strain) + "\n")
+                bf.write(ref)
+        with open("subbed_reads_"+str(strain)+".sam", "w+") as bf:
+            for line in subbed_read:
+                bf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+        #subprocess.run("rm -r batch_*",shell=True)
+        print(subbed_read)
+        for read in subbed_read:
+            readlist.remove(read)
+
+        strain += 1
+        exit()
+
+        '''
+        for read in subbed_read:
+            print(read)
+            read_index = int(read[2]) -1
+            ref = ref[:read_index] + read[3] + ref[read_index+len(read[3]):]
+            readlist.remove(read)
+        with open("batch_" +str(batch)+"_reference.fa","w+") as bf:
+            bf.write(">batch_"+str(batch)+"\n")
+            bf.write(ref)
+        print(len(readlist),"reads left after batch",batch,"diff")
+        verify_sub_command = os.path.dirname(
+            __file__) + "/find_sub.sh" + " " + "-r" + " " + "batch_" +str(batch)+"_reference.fa" + " " + "-1" + " " + readfile1 + " " + "-2" + " " + readfile2 + " " + "-m" + " " + "tog" + " " + "-a" + " " + "bowtie2" + " " + "-c" + " " + 'True' + " -d Y"
+        #verify_sub_command = " python3 $insec/strain_finder.py --gene_L=29903  --ref=/mnt/c/Users/tan/Desktop/UTS/mafft-win/InsEC/spike_test/batch_"+str(batch)+"_reference.fa "+ "--narrowing=True --match_l=1 --sam_file=batch_"+str(batch)+"_reference.fa_output"  + "/round_1_extract.sam --r1_file=/mnt/c/Users/tan/Desktop/UTS/mafft-win/InsEC/corrected_shi_reduced_R1.fastq --r2_file=/mnt/c/Users/tan/Desktop/UTS/mafft-win/InsEC/corrected_shi_reduced_R2.fastq --round=1 --excluded_IDs=excluded_IDs.txt --bubble_mode=True --find_sub=True --check_gap=True"
+        # print(verify_sub_command)
+        # verify_sub_command= shlex.split(verify_sub_command)
+
+        verify_proc = subprocess.run(verify_sub_command,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
+                                       shell=True)
+        # verify_proc = subprocess.run(os.path.dirname(__file__)+" count_error.sh 1 2 3",shell=True,stderr=subprocess.PIPE,stdout=subprocess.PIPE)
+
+        #print(verify_proc.args)
+
+        gap_list = verify_proc.stdout.split("\n")[-3]
+        if gap_list != "no gaps":
+
+            print(gap_list)
+            gap_list = re.sub('[\[\]]','',gap_list)
+            print(gap_list.split(",")[:-1])
+            gap_list = gap_list.split(",")[:-1]
+            gapped_reads = []
+            for read in subbed_read:
+                read_index = int(read[2]) - 1
+                read_misPs = [int(x[0]) for x in read[5:]]
+                for gap in gap_list:
+                    gap = int(gap)
+                    if gap > read_misPs[0]-150 and gap < read_misPs[-1]+150:
+                        gapped_reads.append(read)
+                        break
+
+            if len(gapped_reads) > 0:
+                print(gapped_reads)
+                with open("gapped_reads"+str(batch)+".sam","w+") as grf:
+                    for line in gapped_reads:
+                        grf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+        
+        else:
+            batch += 1
+            continue
+        
+        #exit()
+        batch += 1
+        '''
+def get_output():
+    out = ""
+    with open("test_output.txt","r") as tf:
+        for line in tf:
+            out += line
+    print(out.split("\n")[-2])
+def count_fq_freq(fastqfile):
+    readlist=[]
+    with open(fastqfile,"r") as fq:
+        count = 0
+        while True:
+            block = list(its.islice(fq, 4))
+
+            if not block:
+                break
+            count += 1
+            readlist.append(block[1].strip())
+    print(len(readlist), count)
+    read_freq = Counter(readlist)
+    count = {}
+    print(len(read_freq))
+
+    for k,v in read_freq.items():
+        if v not in count.keys():
+            count.update({v:1})
+        else:
+            count[v] += 1
+
+        #print(k,v)
+    sum_freq = 0
+    for k,v in {k:v for k,v in sorted(count.items(),key=lambda  x : x[1] )}.items():
+        print(k,v)
+        sum_freq += k*v
+    print(sum_freq)
+
+def remove_freq(samfile,freq):
+    readfreq = {}
+    readlist = []
+    target_id = set({})
+    with open(samfile,"r") as f:
+        for line in f:
+            fields = line.strip().split(" ")
+            readlist.append(fields)
+            #print(fields)
+            if len(fields)>0 and fields[3] not in readfreq.keys():
+                readfreq.update({fields[3]:1})
+                #target_id.add(fields[0])
+            else:
+                readfreq[fields[3]] += 1
+                #target_id.remove(fields[0])
+    print(len(readlist),"reads in ",samfile, " uniq reads", len(readfreq))
+    filtered_readlist = []
+    for read in readlist:
+        if readfreq[read[3]] <= freq:
+            target_id.add(read[0])
+        else:
+            filtered_readlist.append(read)
+    print(len(filtered_readlist),"reads with frequency > ",freq)
+    lastpos = -1
+    gapped_index = set({})
+    for read in filtered_readlist:
+        if lastpos > 0 and  lastpos < int(read[2]) :
+            if int(read[2]) not in gapped_index:
+                #gapped_index.add(int(read[2]))
+                print("gap between ",prev, read)
+                #print(read)
+        if read[0] not in target_id:
+            if lastpos == -1:
+                print("first read", read)
+            prev = read
+            lastpos = int(read[2]) + len(read[3])
+    #print(len(gapped_index), " reads have gaps between it and the read before ")
+    #print(gapped_index)
+    if lastpos < 29800:
+        print("last read end at",lastpos)
+    #print(count ,"reads have frequency 1")
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="some tool functions",usage='%(prog)s [options]'+str(sys.argv))
@@ -994,6 +1278,13 @@ if __name__ == "__main__":
     parser.add_argument("--split_seq",type=str,default="no")
     parser.add_argument("--pair_dist", type=str,default="no")
     parser.add_argument("--overlap_id",type=str,default="no")
+    parser.add_argument("--get_read_by_id",type=str,default="no")
+    parser.add_argument("--test_shell",type=str,default="no")
+    parser.add_argument("--get_gap_reads",type=str,default="no")
+    parser.add_argument("--get_ori_half",type=str,default="no")
+    parser.add_argument("--count_fq_freq",type=str,default="no")
+    parser.add_argument("--strain_num",type=int,default=-1)
+    parser.add_argument("--remove_freq", type=int,default=-1)
     args = parser.parse_args()
 
     input_files = args.files
@@ -1021,11 +1312,12 @@ if __name__ == "__main__":
 
     #check_order()
     #fix_ID()
-    #get_ori_half()
+
     #get_contigs()
     if args.rev_comp != "no":
         get_rev_comp(input_files[1],True)
-    #get_read_from_listf()
+    if args.get_read_by_id != "no":
+        get_read_from_listf(input_files[1],input_files[2],input_files[3])
     #rev_comp_read()
     if args.remove_by_ID != "no":
         remove_ID_fastq()
@@ -1033,7 +1325,16 @@ if __name__ == "__main__":
         split_seq(input_files[1],length=2949,step=300)
     if args.pair_dist != "no":
         count_pair_dist(input_files[1])
-
+    if args.test_shell != "no":
+        test_shell(input_files[1],input_files[2])
+    if args.get_gap_reads != "no":
+        get_gap_reads(input_files[1],args.strain_num,input_files[2],input_files[3],input_files[4])
+    if args.get_ori_half != "no":
+        get_ori_half(input_files[1],input_files[2],input_files[3])
+    if args.count_fq_freq != "no":
+        count_fq_freq(input_files[1])
+    if args.remove_freq > 0:
+        remove_freq(input_files[1], args.remove_freq)
     corenum = mp.cpu_count()-2
     line_amount = 245216120
 

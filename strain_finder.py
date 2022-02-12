@@ -1,5 +1,7 @@
 import os, random, time, sys
+import shlex
 import statistics
+import subprocess
 
 import pandas as pd
 import numpy as np
@@ -35,6 +37,9 @@ def get_arguments():
 	parser.add_argument("--excluded_IDs", type=str, default="excluded_IDs.txt")
 	parser.add_argument("--find_sub", type=str, default="no")
 	parser.add_argument("--bubble_mode", type=str, default="False")
+	parser.add_argument("--brute_force", type=str,default="True")
+	parser.add_argument("--check_gap", type=str,default="False")
+	parser.add_argument("--output_dir", type=str,default="")
 	return parser.parse_args()
 
 
@@ -88,9 +93,14 @@ if __name__ == "__main__":
 	readfile2 = args.r2_file
 	find_sub = args.find_sub
 	if find_sub != "no":
-		out_dir = os.path.basename(args.ref) + "_output/"
+		if args.output_dir == "":
+			out_dir = os.path.basename(args.ref) + "_output/"
+		else:
+			out_dir = args.output_dir +"/"
 	else:
 		out_dir = "round_" + str(round_num) + "_output/"
+	print(out_dir)
+
 	if round_num == 1:
 		first_round = True
 	else:
@@ -107,7 +117,6 @@ if __name__ == "__main__":
 	maxposition = 0  # debug variable
 	maxindex = 0  # debug variable
 	labindexes = {}  # debug
-	added_read = {}  # read index with added N in the end and the original length
 	# read reference genome
 	ref = ""
 	changed = 0  # debug
@@ -130,15 +139,309 @@ if __name__ == "__main__":
 
 	initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True)
 	prev_time = time.time()
-	real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, read_list)
+	#if args.brute_force == "True":
+	real_narrowed, paired_real_narrowed, nearly_real_narrowed, potential_mutated = bm.narrow_reads(ref,
+																					initial_matrix_info.narrowed_read,
+																					out_dir, True)
+
+	#real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, False)
 	# del initial_matrix_info
+	#intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed,match_limit,marked_id,False,intermit_matrix_info,"nearly_real_narrowed")
+
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id)
 	intermit_matrix_info.real_narrowed_read = real_narrowed
 	intermit_matrix_info.nearly_real_narrowed_read = nearly_real_narrowed
 	#intermit_matrix_info.narrowed_read = copy.deepcopy(initial_matrix_info.narrowed_read)
 	#intermit_matrix_info.narrowed_matrix = initial_matrix_info.real_narrowed_matrix.copy()
+	#------------------------------------------brute force mode----------
+	gaps = []
+	cols =[]
+
+	for column in range(13,intermit_matrix_info.real_narrowed_matrix.shape[1]):
+		tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(column).toarray())
+		tmp_count = np.bincount(tmp)[1:]
+		cols.append(column)
+		if sum(tmp_count) == 0:
+			gaps.append(column)
+	print("cols for checking gaps",min(cols),max(cols))
+	if len(gaps) > 0:
+		if args.check_gap != "False" :
+			print("only checking gaps")
+			with open("gaps.txt","w+") as gapf:
+				for gap_col in gaps:
+					gapf.write(str(gap_col)+",")
+
+
+		for gap in gaps:
+
+			print(gap,end=",")
+		print()
+		#exit()
+		exit(-4)
+	else:
+		print("no gaps")
+		#exit()
+	#exit() if find_sub != "no"
+
+	if args.check_gap != 'False':
+		print("only checking gaps")
+		exit()
+
+	if args.brute_force == "True":
+		print("brute_force mode")
+		spike_range = range(13,29883)
+		print(len(potential_mutated),"reads not fully matched")
+		endpoints = '''21563..25384
+25393..26220
+26245..26472
+26523..27191
+27202..27387
+27394..27759
+27756..27887
+27894..28259
+28274..29533
+29558..29674'''
+		endpoints_list = endpoints.split("\n")
+		protein_loc = [(265,21555)]
+		for se in endpoints_list:
+			start = se.split("..")[0]
+			end = se.split("..")[1]
+			protein_loc.append((int(start)-1,int(end)-1))
+
+		print(protein_loc)
+
+		mutated_read_freq = Counter([ x[3] for x in potential_mutated])
+
+		sorted_mutated_read = sorted(potential_mutated,key=lambda x : (mutated_read_freq.get(x[3],int(x[2]))),reverse=True)
+
+
+		with open("mutated_read_freq.txt","w+") as mrfreq:
+			for k,v in sorted(mutated_read_freq.items(),key= lambda x:x[1]):
+				if v > 0:
+					mrfreq.write(k+": "+str(v)+"\n")
+
+		print({k:v for k,v in mutated_read_freq.items() if v > 1 })
+		#print(sorted_mutated_read)
+		smr_index = 0
+		misP =[]
+		added_read = set({})
+		reduced_sorted_mutated_read = []
+		for smr_index in range(len(sorted_mutated_read)):
+			if sorted_mutated_read[smr_index][3] in added_read:
+
+				continue
+			else:
+				added_read.add(sorted_mutated_read[smr_index][3])
+			#print(smr_index,sorted_mutated_read[smr_index])
+
+			tmp_misP = []
+			smr_read_index = sorted_mutated_read[smr_index][2]-1
+			for i,base in enumerate(sorted_mutated_read[smr_index][3]):
+				if ref[smr_read_index+i]!= base and smr_read_index+1 in spike_range:
+
+					tmp_misP.append(smr_read_index + i)
+			if len(tmp_misP) == 0:
+				print("no muation inside ",spike_range,"continue to next read")
+				continue
+			reduced_tmp_misP = []
+			for mpi,mp in enumerate(tmp_misP):
+				if mp not in spike_range:
+
+					continue
+				reduced_tmp_misP.append(mp)
+			if len(reduced_tmp_misP) == 0:
+				print("not a  mutation in spike range,continue")
+				continue
+			tmp_misP = reduced_tmp_misP
+
+			otherside_potential_mutated =[]
+			#print(intermit_matrix_info.real_narrowed_matrix.shape)
+			del i
+			rn_matrix = intermit_matrix_info.real_narrowed_matrix
+			for i in range(smr_read_index-1,smr_read_index+len(sorted_mutated_read[smr_index][3])+1):
+				tmp = np.squeeze(rn_matrix.getcol(i).toarray())
+				read_num = np.nonzero(tmp)[0]
+
+				tmp_otherside, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(read_num), intermit_matrix_info.real_narrowed_read, True)
+				otherside_potential_mutated.extend(tmp_otherside)
+			#print("otherside potential mutated ",len(otherside_potential_mutated))
+
+			if len(otherside_potential_mutated) == 0:
+				print("no read covering", sorted_mutated_read[smr_index])
+				continue
+			leftpoint = otherside_potential_mutated[0][2]-2 + len(otherside_potential_mutated[0][3])
+			rightpoint = otherside_potential_mutated[-1][2]
+			sorted_otherside_index = sorted([x[2] for x in otherside_potential_mutated])
+			if leftpoint != sorted_otherside_index[0]-2+len(otherside_potential_mutated[0][3]) or rightpoint != sorted_otherside_index[-1]:
+				print("other side mutated not sorted properly")
+				print(leftpoint,sorted_otherside_index[0],rightpoint,sorted_otherside_index[-1])
+				exit(-2)
+			#print("left and right point",leftpoint,rightpoint)
+			if leftpoint < tmp_misP[0] and rightpoint > tmp_misP[-1]:
+				stop_con = False
+				curr_pos = ()
+				for protein_pos in protein_loc:
+					if protein_pos[0] <= smr_read_index and protein_pos[1] > smr_read_index:
+						curr_pos = protein_pos
+				for mp in tmp_misP:
+					if len(curr_pos) > 0 and mp < curr_pos[1]-2:
+
+						mp_aa_index = (mp-curr_pos[0]) %3
+						if sorted_mutated_read[smr_index][3][mp-smr_read_index-mp_aa_index:mp-smr_read_index+(3-mp_aa_index)] == "TAA":
+							stop_con = True
+							print("stop codon produced by",mp,sorted_mutated_read[smr_index],ref[mp-mp_aa_index:mp+(3-mp_aa_index)])
+							print(mp,smr_read_index,mp_aa_index,curr_pos,sorted_mutated_read[smr_index][3][mp-smr_read_index-mp_aa_index-5:mp-smr_read_index+(3-mp_aa_index)+5])
+							break
+
+						sorted_mutated_read[smr_index].append((mp,ref[mp],sorted_mutated_read[smr_index][3][mp-smr_read_index]))
+					# not in protein range
+					else:
+						sorted_mutated_read[smr_index].append(
+							(mp, ref[mp], sorted_mutated_read[smr_index][3][mp - smr_read_index]))
+				#avoid stop condon produced by substitution
+				if stop_con:
+					continue
+				reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
+
+			else:
+				continue
+				#print("misP", tmp_misP, "smr_read_index", smr_read_index, smr_index)
+				#print(otherside_potential_mutated[0])
+				#print(otherside_potential_mutated[-1])
+				#print("otherside_potential_mutated",len(otherside_potential_mutated))
+			with open("otherside_potentially_mutated_extract.sam","w+") as opmf:
+				for line in otherside_potential_mutated:
+					opmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		del smr_index
+		del smr_read_index
+		#assemble
+
+
+		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
+		with open(out_dir+"sub_read_candidate.sam","w+") as candf:
+			for line in pos_sorted_mutated_read:
+				candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		exit()
+
+		'''strain_num = 0
+		#while len(reduced_sorted_mutated_read) > 0:
+		target_read = reduced_sorted_mutated_read[0]
+		sub_read_list = [pos_sorted_mutated_read[0]]
+		for smr_index in range(len(reduced_sorted_mutated_read)):
+			for read in pos_sorted_mutated_read:
+				if  read[2] > sub_read_list[-1][2] + len(sub_read_list[-1][3]) \
+						and( read[2] > target_read[2]+len(target_read[3]) or read[2]+len(read[3]) < target_read[2]):
+					print(read)
+					sub_read_list.append(read)
+		target_read_pos = -1
+		for read_i,read in enumerate(sub_read_list):
+			if read[2] +len(read[3]) < target_read[2] and target_read[2]+len(target_read[3]) < sub_read_list[read_i+1][2]:
+				target_read_pos = read_i
+				break
+		sub_read_list.insert(target_read_pos+1,target_read)
+		print(target_read)
+		print(len(sub_read_list), "reads to be subbed into reference")
+
+		original_ref = ref
+		del smr_index
+		for smr_index in range(len(sub_read_list)):
+			smr_read_index = sub_read_list[smr_index][2]-1
+			replaced_ref = ref[:smr_read_index] + sub_read_list[smr_index][3] + ref[sub_read_list[smr_index][ 2] - 1 + len(sub_read_list[smr_index][3]):]
+
+
+
+			print(ref[smr_read_index - 10:smr_read_index], ref[sub_read_list[smr_index][2] - 1 + len(
+				sub_read_list[smr_index][3]):sub_read_list[smr_index][2] - 1 + len(sub_read_list[smr_index][3]) + 10])
+
+			ref = replaced_ref
+		with open(out_dir + "mt_read_subbed_" + str(0) + ".fa", "w+") as subf:
+			subf.write(">mutated_read_subbed" + str(0) + "\n")
+			subf.write(ref)
+
+			#-----------------get the gaps and calceling subs that cause gaps----------------
+			print("checking gaps in newly formed sequence after substitution")
+			'''
+			#verify_sub_command= os.path.dirname(__file__)+"/find_sub.sh"+" "+"-r"+" "+ out_dir+"mt_read_subbed_0.fa"+" "+"-1"+" "+readfile1+" "+"-2"+" "+ readfile2+" "+"-m"+" "+"tog"+" "+"-a"+" "+"bowtie2"+" "+"-c"+" " + 'True'+" -d Y
+			#print(verify_sub_command)
+			#verify_sub_command= shlex.split(verify_sub_command)
+
+			#verify_proc = subprocess.run(verify_sub_command,
+			#							   stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
+			#verify_proc = subprocess.run(os.path.dirname(__file__)+" count_error.sh 1 2 3",shell=True,stderr=subprocess.PIPE,stdout=subprocess.PIPE)
+			#print(verify_proc.args)
+			#print(verify_proc.stdout)
+
+		'''
+			#if verify_proc.returncode!=0:
+			#	print("error return code ", verify_proc.returncode)
+			#	exit(-2)
+		gapped_cols = []
+		with open("gaps.txt","r") as rgf:
+			for line in rgf:
+				gapped_cols = line.split(",")[:-2]
+		if len(gapped_cols) == 0:
+			print("no gaps presented in mutated sequence")
+			exit()
+		#restored_reads = set({})
+		rn_ids_count = Counter([x[0] for x in intermit_matrix_info.nearly_real_narrowed_read])
+		gapped_cols = [int(x) for x in gapped_cols]
+		print(gapped_cols)
+		reverted_read_set = set({})
+		for read in sub_read_list:
+			pos_sorted_mutated_read.remove(read)
+			reduced_sorted_mutated_read.remove(read)
+
+			tmp_left = read[2]-1-150
+			tmp_right = tmp_left+150+len(read[3])+150
+			#read_range = range(read[2]-1,read[2]-1+len(read[3]))
+			tmp_gap_set = set({})
+			tmp_range= set(list(range(tmp_left, tmp_right)))
+			#print(tmp_range)
+			tmp_misP = [x[0] for x in read[6:]]
+			for gap_col in gapped_cols:
+
+				if gap_col in tmp_range:
+					if gap_col > tmp_misP[0]-150 and gap_col < tmp_misP[-1]+150:
+						tmp_gap_set.add(gap_col)
+
+				if gap_col > tmp_right:
+					break
+			#print(tmp_gap_set)
+			if len(tmp_gap_set) > 0:
+				#ref[tmp_left:tmp_right] = original_ref[tmp_left:tmp_right]
+				original_read = original_ref[tmp_left+150:tmp_right-150]
+				if len(original_read) == 0:
+					print(read)
+					print(original_read,"empty",len(read[3]),tmp_left+150,read[2]-1,tmp_right-150,tmp_left+len(read[3])+150)
+					exit(-2)
+				ref = ref[:tmp_left+150] + original_read + ref[tmp_right-150:]
+				print(read, "reverted due to gaps at", tmp_gap_set,"changed to",original_read)
+				print("range ",tmp_left,tmp_right)
+				if read[3] not in reverted_read_set:
+					reverted_read_set.add(read[3])
+			else:
+				continue
+			#tmp_all_gaps_set = set(gapped_cols)
+			#gapped_cols = list(tmp_all_gaps_set - tmp_gap_set)
+			#pos_sorted_mutated_read = list(set(pos_sorted_mutated_read)-tmp_gap_set)
+			#print("remaining gapped cols",gapped_cols)
+			if len(gapped_cols) == 0:
+				break
+		with open(out_dir+"strain_"+str(strain_num)+"_reads.sam","w+") as subreadf:
+			for read in sub_read_list:
+				if read[3] not in reverted_read_set:
+					subreadf.write(str(read)+"\n")
+		with open(out_dir + "mt_read_subbed_" + str(strain_num) + ".fa", "w+") as subf:
+			subf.write(">mutated_read_subbed" + str(strain_num) + "\n")
+			subf.write(ref)
+		strain_num += 1
+
+		exit()'''
+
+	else:
+		del potential_mutated
 
 	assert intermit_matrix_info.real_narrowed_matrix.shape[1] == intermit_matrix_info.narrowed_matrix.shape[1]
 	print("narrowed_reads", len(intermit_matrix_info.narrowed_read), "real narrowed",
@@ -159,6 +462,9 @@ if __name__ == "__main__":
 	# print(sorted(np.unique(np.array(insertion_columns))))
 	print("add_matrix", add_matrix.shape)
 	prev_time = time.time()
+
+
+
 
 	# cor_record = bm.get_cor_record()
 
@@ -238,6 +544,7 @@ if __name__ == "__main__":
 	# --------------------get cvg-------------------
 
 	if bubble_mode:
+		print("---------------------------bubble mode-----------------------")
 		empty_count = 0
 		i = 0
 		narrowed_cvg_list = []
@@ -250,6 +557,8 @@ if __name__ == "__main__":
 		rn_min_index = -1
 		ratio_max = -1
 		ratio_max_index = -1
+		nearly_rn_max = -1
+		nearly_rn_max_index = -1
 		#for i in range(0, intermit_matrix_info.real_narrowed_matrix.shape[1]):
 		for i in range(21562,25384):
 			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
@@ -267,14 +576,20 @@ if __name__ == "__main__":
 
 			bub = narrowed_cvg_list[-1] - real_narrowed_cvg_list[-1]
 			tmp2 = np.squeeze(intermit_matrix_info.nearly_real_narrowed_matrix.getcol(i).toarray())
-			tmp_count2 = np.bincount(tmp1)[1:]
+			tmp_count2 = np.bincount(tmp2)[1:]
 			nearly_narrowed_cvg_list.append(sum(tmp_count2))
 
 			ratio = sum(tmp_count2)/sum(tmp_count)
+			if sum(tmp_count) == 0:
+				print(i,tmp_count)
+				exit()
 
 			if ratio_max < ratio:
 				ratio_max = ratio
 				ratio_max_index = i
+			if sum(tmp_count2)> nearly_rn_max:
+				nearly_rn_max= sum(tmp_count2)
+				nearly_rn_max_index = i
 			bubbles.update({i: bub})
 			ratios.update({i: ratio})
 			if sum(tmp_count) ==0 or sum(tmp_count1) == 0:
@@ -282,22 +597,23 @@ if __name__ == "__main__":
 
 		#rn_min_index = 21542
 		#rn_min = 486
-		print(rn_min, rn_min_index, n_min)
+		print(rn_min, rn_min_index, n_min, nearly_rn_max,nearly_rn_max_index)
 		print(ratio_max,ratio_max_index,real_narrowed_cvg_list[ratio_max_index-21562], nearly_narrowed_cvg_list[ratio_max_index-21562])
 		sg_range = list(range(ratio_max_index - 150, ratio_max_index + 150))
 		rn_sg_extend = 75
-		rn_covered_reads = []
+		nearly_rn_covered_reads = []
 		side_bubble_reads = []
+		test_nearly_rn_id_list = []
 		for rn_i in sg_range:
-			rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_i).toarray())
+			#rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_i).toarray())
 			nearly_rn_tmp = np.squeeze(intermit_matrix_info.nearly_real_narrowed_matrix.getcol(rn_i).toarray())
 			# print("rn sg-i", np.bincount(rn_tmp)[1:])
 			# print("n sg-i",np.bincount(n_tmp)[1:])
-			rn_readnum = np.nonzero(rn_tmp)[0]
+			#rn_readnum = np.nonzero(rn_tmp)[0]
 
 			# real_before = copy.deepcopy(intermit_matrix_info.real_narrowed_read)
-			tmp_rn_read_list, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
-																				   intermit_matrix_info.real_narrowed_read)
+			#tmp_rn_read_list, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
+			#																	   intermit_matrix_info.real_narrowed_read)
 
 			# test_thinread_set, test_narrowed_read = bm.marking_byid(list(thin_readnum),rn_min,real_before,set({}))
 
@@ -305,14 +621,18 @@ if __name__ == "__main__":
 
 			tmp_nearly_rn_read_list, intermit_matrix_info.nearly_reaL_narrowed_read = bm.collecting_bubbles(list(nearly_rn_readnum),
 																		 intermit_matrix_info.nearly_real_narrowed_read)
-
-			rn_covered_reads.extend([x[3] for x in tmp_rn_read_list])
-			rn_covered_reads.extend([x[3] for x in tmp_nearly_rn_read_list])
+			#tmp_nearly_rn_read_list, intermit_matrix_info.nearly_real_narrowed_read = bm.marking(nearly_rn_readnum,1000,intermit_matrix_info.nearly_real_narrowed_read)
+			#print(sum(np.bincount(nearly_rn_tmp)[1:]),nearly_rn_readnum.shape,len(tmp_nearly_rn_read_list),end=";")
+			#rn_covered_reads.extend([x[3] for x in tmp_rn_read_list])
+			nearly_rn_covered_reads.extend([x[3] for x in tmp_nearly_rn_read_list])
 			#side_bubble_reads.extend(tmp_rn_read_list)
 			side_bubble_reads.extend(tmp_nearly_rn_read_list)
+
+			test_nearly_rn_id_list.extend(tmp_nearly_rn_read_list)
 			# print(len(whole_col), len(thin_readnum))
-		print(len(rn_covered_reads)," reads from sg_range")
-		del rn_i
+
+		print(len(nearly_rn_covered_reads), len(side_bubble_reads), " reads from sg_range")
+		'''		del rn_i
 		for rn_i in [x for x in range(sg_range[0]-rn_sg_extend, sg_range[-1]+rn_sg_extend) if x not in set(sg_range)]:
 		#for rn_i in [x for x in range(21563,25384) if x not in set(sg_range)]:
 			rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_i).toarray())
@@ -323,13 +643,36 @@ if __name__ == "__main__":
 												intermit_matrix_info.real_narrowed_read)
 			rn_covered_reads.extend([x[3] for x in tmp_rn_read_list])
 
-			side_bubble_reads.extend(tmp_rn_read_list)
-		del rn_i
-		print(len(rn_covered_reads)," reads from sg_range_extend")
-		rn_read_set = set(rn_covered_reads)
+			side_bubble_reads.extend(tmp_rn_read_list)'''
+		rn_tmp_1 = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(ratio_max_index-225).toarray())
+		rn_readnum = np.nonzero(rn_tmp_1)[0]
+		tmp_rn_read_list_1, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
+											  intermit_matrix_info.real_narrowed_read)
+		rn_tmp_2 = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(22375).toarray())
+		rn_readnum = np.nonzero(rn_tmp_2)[0]
+		tmp_rn_read_list_2, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
+										intermit_matrix_info.real_narrowed_read)
+
+		nearly_rn_covered_reads.extend([x[3] for x in tmp_rn_read_list_1])
+		nearly_rn_covered_reads.extend([x[3] for x in tmp_rn_read_list_2])
+		side_bubble_reads.extend(tmp_rn_read_list_1)
+		side_bubble_reads.extend(tmp_rn_read_list_2)
+
+		print(len(tmp_rn_read_list_1),len(tmp_rn_read_list_2),"from sg-i -225 sg-i +225")
+
+		print(len(nearly_rn_covered_reads), " reads from sg_range_extend")
+		rn_read_set = set(nearly_rn_covered_reads)
+
 		print( len(side_bubble_reads), "  reads for side bubbles ")
+
+		#nearly_rn_id_set = set(test_nearly_rn_id_list)
+		#print(len(nearly_rn_id_set))
+
+		#bm.get_ori_half(readfile1,readfile2,nearly_rn_id_set,out_dir,intermit_matrix_info.nearly_real_narrowed_read)
+		#exit()
+
 		test_flag = format(side_bubble_reads[0][1],'b')[::-1]
-		print(test_flag)
+
 		if test_flag[4] == "1":
 			if test_flag[6] == "1":
 				rc_file = readfile1
@@ -340,7 +683,7 @@ if __name__ == "__main__":
 				rc_file = readfile2
 			else:
 				rc_file = readfile1
-		bm.get_bubble_reads(readfile1,readfile2,side_bubble_reads,out_dir, rc_file)
+		#bm.get_bubble_reads(readfile1,readfile2,side_bubble_reads,out_dir, rc_file)
 
 		'''
 		with open("thin_segments_reads_IDs.txt", "w+") as tf:
@@ -362,13 +705,28 @@ if __name__ == "__main__":
 		bubble_list = [v for v in bubbles.values()]
 		print(len(bubble_list), len(narrowed_cvg_list), len(narrowed_cvg_list))
 		print(statistics.median(bubble_list), statistics.median(bubble_list), max(bubble_list))
+		sorted_side_bubble_reads = sorted(side_bubble_reads,key=lambda x:x[2])
+
+
 		with open("side_bubble_extract.sam","w+") as sbf:
 
-			for line in side_bubble_reads:
+			for line in sorted_side_bubble_reads:
 				sbf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 		with open("bubbles.txt","w+") as bf:
 			for k in bubbles.keys():
 				bf.write(str(k)+": "+str(bubbles[k])+", ")
+
+		with open("nearly_real_narrowed_cvg.txt","w+") as near_rncf, open("real_narrowed_cvg.txt", "w+") as rncf:
+			for i,v in enumerate(nearly_narrowed_cvg_list):
+				near_rncf.write(str(i+21562)+": "+str(v)+", ")
+				rncf.write(str(i+21562)+": "+str(real_narrowed_cvg_list[i])+", ")
+		with open("start_end_225_reads.sam","w+") as rnf225:
+			for line in tmp_rn_read_list_1:
+				rnf225.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+			rnf225.write("------------------------------------"+"\n")
+			for line in tmp_rn_read_list_2:
+				rnf225.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		#print(sorted(nearly_narrowed_cvg_list)[:-10],sorted(real_narrowed_cvg_list)[:-10])
 		exit()
 
 		# ----------------------plotting bubbles----------

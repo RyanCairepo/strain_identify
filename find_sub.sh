@@ -13,7 +13,7 @@ echo "using $core_count threads"
 #---extract commandline arguments---
 function  help {
     echo "Usage:"
-    echo "Typical use for paired-end reads, align both read files together (-m c) with \$aligner (-a \$aligner):"
+    echo "Typical use for paired-end reads, align both read files (-1 read1 -2 read2) together (-m tog) with \$aligner (-a \$aligner):"
     echo "run.sh -r reference.fasta -1 first_read_file.fastq -2 second_read_file.fastq -m c -a \$aligner"
     echo "-a:     Aligner of choice: minimap2 bowtie2 bwa-mem2"
     echo "-m:     Alignment mode, tog means align both paired-end read files together, sep means align the
@@ -25,10 +25,17 @@ function  help {
 mode="tog"
 aligner="bowtie2"
 round=5
-while getopts ":h:r:1:2:m:0:f:a:n:" option; do
+check_gap=False
+out_dir="none"
+#echo "args are:"
+#echo "$@"
+#echo "${#@}"
+delete="n"
+while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:" option; do
     ((optnum++))
    case ${option} in
       h) # display Help
+
          help
          exit;;
      \?)
@@ -52,6 +59,14 @@ while getopts ":h:r:1:2:m:0:f:a:n:" option; do
     n)
         round=${OPTARG}
         echo "$round";;
+    c)
+        check_gap=${OPTARG}
+        echo "$check_gap";;
+    d)
+        delete=${OPTARG};;
+    o)
+        out_dir=${OPTARG};;
+
    esac
 done
 
@@ -258,7 +273,10 @@ for i in {1..1};do
     echo "$i $ref $len_limit"
     #out_dir=round_"$i"_output
     #contig_dir=round_"$i"_contig
-    out_dir="${ref##*/}"_output
+    if  [ "$out_dir" == "none" ]; then
+        out_dir="${ref##*/}"_output
+    fi
+
     echo output dir is  "$out_dir"
 
 
@@ -267,13 +285,14 @@ for i in {1..1};do
         echo "gene length $fL too short"
         exit
     fi
+
     if [ -d "$out_dir" ]; then
         echo remove "$out_dir" ? Y/N
-        read delete
+
         if [ $delete == "Y" ]; then
             if [ -d "$out_dir" ]; then
                 mv "$out_dir" "$out_dir"_del
-
+                rm -r "$out_dir"
                 mkdir "$out_dir"
             fi
 #            if [ -d "$contig_dir" ]; then
@@ -286,6 +305,9 @@ for i in {1..1};do
     else
         mkdir "$out_dir"
     fi
+
+    echo "$ref" "$read1" "$read2" "$mode" "$check_gap" "$aligner" > "$out_dir"/args.txt
+
 
     build_index
     alignment
@@ -318,14 +340,14 @@ for i in {1..1};do
     #ref=$(<../${1})
     #echo $ref
     match_limit=1 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
-    echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --round=$i --excluded_IDs=/dev/null --find_sub=True";
+    echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --round=$i --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap} --output_dir=${out_dir}";
 
     if [ $i -eq 1 ]; then
         cp /dev/null  "excluded_IDs.txt"
     fi
 
     if [ -e "$read1" ] && [ -e "$read2" ]; then
-        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True --bubble_mode=no;
+        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True --bubble_mode=True --check_gap="$check_gap" --output_dir="$out_dir";
     else
 
        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
