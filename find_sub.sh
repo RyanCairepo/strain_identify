@@ -278,7 +278,7 @@ for i in {1..1};do
     fi
 
     echo output dir is  "$out_dir"
-
+    #rm split_gene*
 
     fL=$( tr -d '\r' < "$ref" | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)
     if (( $(echo "$fL < $len_limit" | bc -l) )); then
@@ -347,7 +347,7 @@ for i in {1..1};do
     fi
 
     if [ -e "$read1" ] && [ -e "$read2" ]; then
-        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True --bubble_mode=True --check_gap="$check_gap" --output_dir="$out_dir";
+        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --output_dir="$out_dir";
     else
 
        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
@@ -367,7 +367,9 @@ for i in {1..1};do
     echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
     cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
     cp real_narrowed_cvg.txt "$out_dir"/
+    cp nearly_real_narrowed_cvg.txt "$out_dir"/
     cp thin_* "$out_dir"/
+    cp mutated_read_freq* "$out_dir"/
 
 
 #    "${DIR}"/megahit/build/megahit -1 "$out_dir"/half_real_R1.fastq -2 "$out_dir"/half_real_R2.fastq -o "$contig_dir"

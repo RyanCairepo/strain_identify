@@ -29,7 +29,7 @@ def get_arguments():
 	parser.add_argument("--narrowing", type=str, default="False")
 	parser.add_argument("--domin_l", type=float, default=0.5)
 	parser.add_argument("--count_l", type=int, default=10)
-	parser.add_argument("--match_l", type=float, default=0.975)
+	parser.add_argument("--match_l", type=float, default=0)
 	# parser.add_argument("--first_r", type=bool, default=True)
 	parser.add_argument("--r1_file", type=str)
 	parser.add_argument("--r2_file", type=str, default="")
@@ -38,6 +38,7 @@ def get_arguments():
 	parser.add_argument("--find_sub", type=str, default="no")
 	parser.add_argument("--bubble_mode", type=str, default="False")
 	parser.add_argument("--brute_force", type=str,default="True")
+	parser.add_argument("--misp_mode", type=str, default="False")
 	parser.add_argument("--check_gap", type=str,default="False")
 	parser.add_argument("--output_dir", type=str,default="")
 	return parser.parse_args()
@@ -52,6 +53,7 @@ def DNA_Re_complement(sequence):
 	sequence = sequence.replace('G', 'c')
 	comp_s = sequence.upper()
 	return comp_s[::-1]
+
 
 
 dict_tonu = {'A': 1, 'C': 2, 'T': 3, 'G': 4, 'N': 5, '-': 6}
@@ -92,6 +94,8 @@ if __name__ == "__main__":
 	readfile1 = args.r1_file
 	readfile2 = args.r2_file
 	find_sub = args.find_sub
+
+
 	if find_sub != "no":
 		if args.output_dir == "":
 			out_dir = os.path.basename(args.ref) + "_output/"
@@ -109,6 +113,11 @@ if __name__ == "__main__":
 		bubble_mode = True
 	else:
 		bubble_mode = False
+
+	if args.misp_mode == "True":
+		misp_mode = True
+	else:
+		misp_mode = False
 
 	row_l = []
 	col_l = []
@@ -139,6 +148,9 @@ if __name__ == "__main__":
 
 	initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True)
 	prev_time = time.time()
+
+
+
 	#if args.brute_force == "True":
 	real_narrowed, paired_real_narrowed, nearly_real_narrowed, potential_mutated = bm.narrow_reads(ref,
 																					initial_matrix_info.narrowed_read,
@@ -147,11 +159,11 @@ if __name__ == "__main__":
 	#real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, False)
 	# del initial_matrix_info
 	#intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
-	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
+	intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed,match_limit,marked_id,False,intermit_matrix_info,"nearly_real_narrowed")
 
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id)
-	intermit_matrix_info.real_narrowed_read = real_narrowed
+	intermit_matrix_info.real_narrowed_read = paired_real_narrowed
 	intermit_matrix_info.nearly_real_narrowed_read = nearly_real_narrowed
 	#intermit_matrix_info.narrowed_read = copy.deepcopy(initial_matrix_info.narrowed_read)
 	#intermit_matrix_info.narrowed_matrix = initial_matrix_info.real_narrowed_matrix.copy()
@@ -204,7 +216,7 @@ if __name__ == "__main__":
 28274..29533
 29558..29674'''
 		endpoints_list = endpoints.split("\n")
-		protein_loc = [(265,21555)]
+		protein_loc = []#(265,21555)
 		for se in endpoints_list:
 			start = se.split("..")[0]
 			end = se.split("..")[1]
@@ -261,6 +273,8 @@ if __name__ == "__main__":
 			del i
 			rn_matrix = intermit_matrix_info.real_narrowed_matrix
 			for i in range(smr_read_index-1,smr_read_index+len(sorted_mutated_read[smr_index][3])+1):
+				if i >= rn_matrix.shape[1]:
+					break
 				tmp = np.squeeze(rn_matrix.getcol(i).toarray())
 				read_num = np.nonzero(tmp)[0]
 
@@ -279,6 +293,7 @@ if __name__ == "__main__":
 				print(leftpoint,sorted_otherside_index[0],rightpoint,sorted_otherside_index[-1])
 				exit(-2)
 			#print("left and right point",leftpoint,rightpoint)
+
 			if leftpoint < tmp_misP[0] and rightpoint > tmp_misP[-1]:
 				stop_con = False
 				curr_pos = ()
@@ -322,7 +337,26 @@ if __name__ == "__main__":
 		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
 		with open(out_dir+"sub_read_candidate.sam","w+") as candf:
 			for line in pos_sorted_mutated_read:
-				candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+				candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " " + str(mutated_read_freq[line[3]]) +" "+ "\n")
+
+		rn_cvg_list= []
+		nearly_rn_cvg_list = []
+		print(intermit_matrix_info.real_narrowed_matrix.shape,intermit_matrix_info.nearly_real_narrowed_matrix.shape)
+		for i in spike_range:
+			if i >= intermit_matrix_info.real_narrowed_matrix.shape[1]:
+				break
+			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
+			tmp_count = np.bincount(tmp)[1:]
+			rn_cvg_list.append(sum(tmp_count))
+			if i < intermit_matrix_info.nearly_real_narrowed_matrix.shape[1]:
+				tmp2 = np.squeeze(intermit_matrix_info.nearly_real_narrowed_matrix.getcol(i).toarray())
+				tmp_count2 = np.bincount(tmp2)[1:]
+				nearly_rn_cvg_list.append(sum(tmp_count2))
+
+		with open("nearly_real_narrowed_cvg.txt","w+") as near_rncf, open("real_narrowed_cvg.txt", "w+") as rncf:
+			for i,v in enumerate(nearly_rn_cvg_list):
+				near_rncf.write(str(i)+": "+str(v)+", ")
+				rncf.write(str(i)+": "+str(rn_cvg_list[i])+", ")
 		exit()
 
 		'''strain_num = 0
