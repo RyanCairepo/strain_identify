@@ -11,6 +11,7 @@ import editdistance
 import matplotlib.pyplot as plt
 import scipy.interpolate
 import build_matrix as bm
+import strain_finder as st_find
 
 
 def countbase():
@@ -538,6 +539,7 @@ def get_sam_dup():
 
 
 def adjustindex(moveby):
+	"""needs work, plan use for read index adjust"""
 	allreads = []
 	with open(sys.argv[1], "r") as f:
 		for line in f:
@@ -1053,8 +1055,12 @@ def test_shell(readfile1, readfile2):
 	print(verify_proc.stdout)
 
 
-def get_gap_reads(ref, strain, samfile, readfile1, readfile2):
-	misp_bit = 6
+def get_gap_reads(ref_file, strain, samfile, readfile1, readfile2):
+	"""produce and verify new strain
+	@param ref_file fasta file of reference sequence
+	@param strain integer number of strain
+	"""
+
 	# strain = 2
 	if strain < 0:
 		print("invalid strain number, error")
@@ -1066,24 +1072,24 @@ def get_gap_reads(ref, strain, samfile, readfile1, readfile2):
 			with open("subbed_reads_" + str(i) + ".sam", "r") as subf:
 				for line in subf:
 					sline = line.strip().split(" ")
-					prev_readset.add(sline[3])
+					prev_readset.add(sline[st_find.read_field])
 			with open("rejected_subbed_reads_" + str(i) + ".sam", "r") as rejf:
 				for line in rejf:
 					fields = line.strip().split(" ")
-					prev_readset.add(fields[3])
+					prev_readset.add(fields[st_find.read_field])
 			print(len(prev_readset))
 	readlist = []
 	with open(samfile, "r") as samf:
 		for line in samf:
-			if line.split(" ")[3] not in prev_readset:
+			if line.split(" ")[st_find.read_field] not in prev_readset:
 				fields = line.strip().split(" ")
-				if "N" in fields[3]:
+				if "N" in fields[st_find.read_field]:
 					continue
 				readlist.append(fields)
 	readlist = fix_s_pos(readlist)
 	print(len(readlist), "candidate reads")
 	ref_seq = ""
-	with open(ref, "r") as rf:
+	with open(ref_file, "r") as rf:
 		for line in rf:
 			if line[0] != ">":
 				ref_seq += line.strip()
@@ -1091,12 +1097,12 @@ def get_gap_reads(ref, strain, samfile, readfile1, readfile2):
 
 	for ir, read in enumerate(readlist):
 		tmp_misP = []
-		read_index = int(read[2]) - 1
-		for i, base in enumerate(read[3]):
+		read_index = int(read[st_find.index_field]) - 1
+		for i, base in enumerate(read[st_find.read_field]):
 			if ref[read_index + i] != base:
 				tmp_misP.append(read_index + i)
 		for mp in tmp_misP:
-			read.append((int(mp), ref[mp], read[3][mp - read_index]))
+			read.append((int(mp), ref[mp], read[st_find.read_field][mp - read_index]))
 
 	batch = 0
 
@@ -1108,7 +1114,7 @@ def get_gap_reads(ref, strain, samfile, readfile1, readfile2):
 	for batch, read in enumerate(readlist):
 		overlap = False
 		read_index = int(read[2]) - 1
-		read_misPs = [int(x[0]) for x in read[misp_bit:]]
+		read_misPs = [int(x[0]) for x in read[st_find.misp_field:]]
 		'''   
         if len(subbed_read) == 0:
             subbed_read.append(read)
@@ -1155,12 +1161,12 @@ def get_gap_reads(ref, strain, samfile, readfile1, readfile2):
                             '''
 
 			clash = False
-			for rei, base in enumerate(read[3]):
-				r_start = int(read[2]) - 1
+			for rei, base in enumerate(read[st_find.read_field]):
+				r_start = int(read[st_find.index_field]) - 1
 				if r_start + rei in covered_pos.keys():
-					if read[3][rei] != covered_pos[r_start + rei]:
+					if read[st_find.read_field][rei] != covered_pos[r_start + rei]:
 						clash = True
-						print("clash at", r_start + rei, covered_pos[r_start + rei], read[3][rei])
+						print("clash at", r_start + rei, covered_pos[r_start + rei], read[st_find.read_field][rei])
 						break
 				# for sr in subbed_read:
 				#    sr_start = int(sr[2])-1
@@ -1269,17 +1275,17 @@ def get_gap_reads(ref, strain, samfile, readfile1, readfile2):
 					covered_pos.update({read_start + ind: base})
 			if batch == 0:
 				# misPs.extend(read_misPs)
-				misPs.extend(read[misp_bit:])
+				misPs.extend(read[st_find.misp_field:])
 			else:
-				misPs.extend(read[misp_bit:])
+				misPs.extend(read[st_find.misp_field:])
 				misPs = sorted(misPs, key=lambda x: int(x[0]))
 				curr_index = 0
 				for new_np_index, new_mp in enumerate(read_misPs):
 					if new_mp <= int(misPs[0][0]):
 						# misPs.insert(0, new_mp)
-						misPs.insert(0, read[misp_bit + new_np_index])
+						misPs.insert(0, read[st_find.misp_field + new_np_index])
 					elif new_mp >= int(misPs[-1][0]):
-						misPs.insert(-1, read[misp_bit + new_np_index])
+						misPs.insert(-1, read[st_find.misp_field + new_np_index])
 					else:
 						while curr_index < len(misPs):
 							if new_mp <= curr_index:

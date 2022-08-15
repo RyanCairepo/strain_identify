@@ -16,6 +16,46 @@ import copy
 # import matplotlib.pyplot as plt
 from typing import Counter
 
+id_field = 0
+flag_field = 1
+index_field = 2
+read_field = 3
+cigar_field = 4
+freq_field = 5
+misp_field = 6
+'''
+positions for each protein region
+'''
+endpoints = '''21563..25384
+25393..26220
+26245..26472
+26523..27191
+27202..27387
+27394..27759
+27756..27887
+27894..28259
+28274..29533
+29558..29674'''
+dict_tonu = {'A': 1, 'C': 2, 'T': 3, 'G': 4, 'N': 5, '-': 6}
+dict_tole = dict(zip(dict_tonu.values(), dict_tonu.keys()))
+protein_loc = []  # (265,21555)
+
+def global_init():
+	"""
+	initializing global variables for handling sam file fields
+	"""
+	global id_field, flag_field, index_field, read_field, cigar_field, freq_field, \
+		misp_field, protein_loc, dict_tonu, dict_tole
+
+	endpoints_list = endpoints.split("\n")
+	for se in endpoints_list:
+		start = se.split("..")[0]
+		end = se.split("..")[1]
+		protein_loc.append((int(start) - 1, int(end) - 1))
+
+	#print(protein_loc)
+
+
 
 # set arguments
 def get_arguments():
@@ -55,14 +95,11 @@ def DNA_Re_complement(sequence):
 	return comp_s[::-1]
 
 
-
-dict_tonu = {'A': 1, 'C': 2, 'T': 3, 'G': 4, 'N': 5, '-': 6}
-dict_tole = dict(zip(dict_tonu.values(), dict_tonu.keys()))
-
 if __name__ == "__main__":
 	# -------------------- main function is here-----------------------------------------------------
 	start_time = time.time()
 
+	global_init()
 	args = get_arguments()
 	print('Running parameters:\n')
 	print(json.dumps(vars(args), indent=4, separators=(',', ':')))
@@ -76,8 +113,7 @@ if __name__ == "__main__":
 
 	r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
 
-	dict_tonu = {'A': 1, 'C': 2, 'T': 3, 'G': 4, 'N': 5, '-': 6}
-	dict_tole = dict(zip(dict_tonu.values(), dict_tonu.keys()))
+
 
 	# setting
 	round_num = args.round
@@ -205,28 +241,11 @@ if __name__ == "__main__":
 		print("brute_force mode")
 		spike_range = range(13,29883)
 		print(len(potential_mutated),"reads not fully matched")
-		endpoints = '''21563..25384
-25393..26220
-26245..26472
-26523..27191
-27202..27387
-27394..27759
-27756..27887
-27894..28259
-28274..29533
-29558..29674'''
-		endpoints_list = endpoints.split("\n")
-		protein_loc = []#(265,21555)
-		for se in endpoints_list:
-			start = se.split("..")[0]
-			end = se.split("..")[1]
-			protein_loc.append((int(start)-1,int(end)-1))
 
-		print(protein_loc)
 
-		mutated_read_freq = Counter([ x[3] for x in potential_mutated])
+		mutated_read_freq = Counter([ x[read_field] for x in potential_mutated])
 
-		sorted_mutated_read = sorted(potential_mutated,key=lambda x : (mutated_read_freq.get(x[3],int(x[2]))),reverse=True)
+		sorted_mutated_read = sorted(potential_mutated,key=lambda x : (mutated_read_freq.get(x[read_field],int(x[index_field]))),reverse=True)
 
 
 		with open("mutated_read_freq.txt","w+") as mrfreq:
@@ -239,9 +258,9 @@ if __name__ == "__main__":
 		smr_index = 0
 		misP =[]
 		added_read = set({})
-		reduced_sorted_mutated_read = []
+		#reduced_sorted_mutated_read = []
 		for smr_index in range(len(sorted_mutated_read)):
-			if sorted_mutated_read[smr_index][3] in added_read:
+			if sorted_mutated_read[smr_index][read_field] in added_read:
 
 				continue
 			else:
@@ -249,8 +268,8 @@ if __name__ == "__main__":
 			#print(smr_index,sorted_mutated_read[smr_index])
 
 			tmp_misP = []
-			smr_read_index = sorted_mutated_read[smr_index][2]-1
-			for i,base in enumerate(sorted_mutated_read[smr_index][3]):
+			smr_read_index = sorted_mutated_read[smr_index][index_field]-1
+			for i,base in enumerate(sorted_mutated_read[smr_index][read_field]):
 				if ref[smr_read_index+i]!= base and smr_read_index+1 in spike_range:
 
 					tmp_misP.append(smr_read_index + i)
@@ -272,14 +291,21 @@ if __name__ == "__main__":
 			#print(intermit_matrix_info.real_narrowed_matrix.shape)
 			del i
 			rn_matrix = intermit_matrix_info.real_narrowed_matrix
-			for i in range(smr_read_index-1,smr_read_index+len(sorted_mutated_read[smr_index][3])+1):
+			covered_read = []
+			included_reduced_smr = set({})
+			for i in range(smr_read_index-1,smr_read_index+len(sorted_mutated_read[smr_index][read_field])+1):
 				if i >= rn_matrix.shape[1]:
 					break
 				tmp = np.squeeze(rn_matrix.getcol(i).toarray())
 				read_num = np.nonzero(tmp)[0]
+				#reduced_sorted_mutated_read.extend([intermit_matrix_info.real_narrowed_read[x] for x in read_num if intermit_matrix_info.real_narrowed_read[x][3] not in included_reduced_smr])
+				#included_reduced_smr.add(intermit_matrix_info.real_narrowed_read[x][3] for x in read_num )
 
+
+				'''
 				tmp_otherside, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(read_num), intermit_matrix_info.real_narrowed_read, True)
 				otherside_potential_mutated.extend(tmp_otherside)
+			
 			#print("otherside potential mutated ",len(otherside_potential_mutated))
 
 			if len(otherside_potential_mutated) == 0:
@@ -329,15 +355,18 @@ if __name__ == "__main__":
 			with open("otherside_potentially_mutated_extract.sam","w+") as opmf:
 				for line in otherside_potential_mutated:
 					opmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		'''
 		del smr_index
 		del smr_read_index
 		#assemble
 
 
-		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
+		pos_sorted_mutated_read =copy.deepcopy(sorted_mutated_read)
+		#exclude reads with N
 		with open(out_dir+"sub_read_candidate.sam","w+") as candf:
 			for line in pos_sorted_mutated_read:
-				candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " " + str(mutated_read_freq[line[3]]) +" "+ "\n")
+				if "N" not in line[read_field]:
+					candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " " + str(mutated_read_freq[line[3]]) +" "+ "\n")
 
 		rn_cvg_list= []
 		nearly_rn_cvg_list = []
@@ -357,122 +386,11 @@ if __name__ == "__main__":
 			for i,v in enumerate(nearly_rn_cvg_list):
 				near_rncf.write(str(i)+": "+str(v)+", ")
 				rncf.write(str(i)+": "+str(rn_cvg_list[i])+", ")
+
+
 		exit()
 
-		'''strain_num = 0
-		#while len(reduced_sorted_mutated_read) > 0:
-		target_read = reduced_sorted_mutated_read[0]
-		sub_read_list = [pos_sorted_mutated_read[0]]
-		for smr_index in range(len(reduced_sorted_mutated_read)):
-			for read in pos_sorted_mutated_read:
-				if  read[2] > sub_read_list[-1][2] + len(sub_read_list[-1][3]) \
-						and( read[2] > target_read[2]+len(target_read[3]) or read[2]+len(read[3]) < target_read[2]):
-					print(read)
-					sub_read_list.append(read)
-		target_read_pos = -1
-		for read_i,read in enumerate(sub_read_list):
-			if read[2] +len(read[3]) < target_read[2] and target_read[2]+len(target_read[3]) < sub_read_list[read_i+1][2]:
-				target_read_pos = read_i
-				break
-		sub_read_list.insert(target_read_pos+1,target_read)
-		print(target_read)
-		print(len(sub_read_list), "reads to be subbed into reference")
 
-		original_ref = ref
-		del smr_index
-		for smr_index in range(len(sub_read_list)):
-			smr_read_index = sub_read_list[smr_index][2]-1
-			replaced_ref = ref[:smr_read_index] + sub_read_list[smr_index][3] + ref[sub_read_list[smr_index][ 2] - 1 + len(sub_read_list[smr_index][3]):]
-
-
-
-			print(ref[smr_read_index - 10:smr_read_index], ref[sub_read_list[smr_index][2] - 1 + len(
-				sub_read_list[smr_index][3]):sub_read_list[smr_index][2] - 1 + len(sub_read_list[smr_index][3]) + 10])
-
-			ref = replaced_ref
-		with open(out_dir + "mt_read_subbed_" + str(0) + ".fa", "w+") as subf:
-			subf.write(">mutated_read_subbed" + str(0) + "\n")
-			subf.write(ref)
-
-			#-----------------get the gaps and calceling subs that cause gaps----------------
-			print("checking gaps in newly formed sequence after substitution")
-			'''
-			#verify_sub_command= os.path.dirname(__file__)+"/find_sub.sh"+" "+"-r"+" "+ out_dir+"mt_read_subbed_0.fa"+" "+"-1"+" "+readfile1+" "+"-2"+" "+ readfile2+" "+"-m"+" "+"tog"+" "+"-a"+" "+"bowtie2"+" "+"-c"+" " + 'True'+" -d Y
-			#print(verify_sub_command)
-			#verify_sub_command= shlex.split(verify_sub_command)
-
-			#verify_proc = subprocess.run(verify_sub_command,
-			#							   stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
-			#verify_proc = subprocess.run(os.path.dirname(__file__)+" count_error.sh 1 2 3",shell=True,stderr=subprocess.PIPE,stdout=subprocess.PIPE)
-			#print(verify_proc.args)
-			#print(verify_proc.stdout)
-
-		'''
-			#if verify_proc.returncode!=0:
-			#	print("error return code ", verify_proc.returncode)
-			#	exit(-2)
-		gapped_cols = []
-		with open("gaps.txt","r") as rgf:
-			for line in rgf:
-				gapped_cols = line.split(",")[:-2]
-		if len(gapped_cols) == 0:
-			print("no gaps presented in mutated sequence")
-			exit()
-		#restored_reads = set({})
-		rn_ids_count = Counter([x[0] for x in intermit_matrix_info.nearly_real_narrowed_read])
-		gapped_cols = [int(x) for x in gapped_cols]
-		print(gapped_cols)
-		reverted_read_set = set({})
-		for read in sub_read_list:
-			pos_sorted_mutated_read.remove(read)
-			reduced_sorted_mutated_read.remove(read)
-
-			tmp_left = read[2]-1-150
-			tmp_right = tmp_left+150+len(read[3])+150
-			#read_range = range(read[2]-1,read[2]-1+len(read[3]))
-			tmp_gap_set = set({})
-			tmp_range= set(list(range(tmp_left, tmp_right)))
-			#print(tmp_range)
-			tmp_misP = [x[0] for x in read[6:]]
-			for gap_col in gapped_cols:
-
-				if gap_col in tmp_range:
-					if gap_col > tmp_misP[0]-150 and gap_col < tmp_misP[-1]+150:
-						tmp_gap_set.add(gap_col)
-
-				if gap_col > tmp_right:
-					break
-			#print(tmp_gap_set)
-			if len(tmp_gap_set) > 0:
-				#ref[tmp_left:tmp_right] = original_ref[tmp_left:tmp_right]
-				original_read = original_ref[tmp_left+150:tmp_right-150]
-				if len(original_read) == 0:
-					print(read)
-					print(original_read,"empty",len(read[3]),tmp_left+150,read[2]-1,tmp_right-150,tmp_left+len(read[3])+150)
-					exit(-2)
-				ref = ref[:tmp_left+150] + original_read + ref[tmp_right-150:]
-				print(read, "reverted due to gaps at", tmp_gap_set,"changed to",original_read)
-				print("range ",tmp_left,tmp_right)
-				if read[3] not in reverted_read_set:
-					reverted_read_set.add(read[3])
-			else:
-				continue
-			#tmp_all_gaps_set = set(gapped_cols)
-			#gapped_cols = list(tmp_all_gaps_set - tmp_gap_set)
-			#pos_sorted_mutated_read = list(set(pos_sorted_mutated_read)-tmp_gap_set)
-			#print("remaining gapped cols",gapped_cols)
-			if len(gapped_cols) == 0:
-				break
-		with open(out_dir+"strain_"+str(strain_num)+"_reads.sam","w+") as subreadf:
-			for read in sub_read_list:
-				if read[3] not in reverted_read_set:
-					subreadf.write(str(read)+"\n")
-		with open(out_dir + "mt_read_subbed_" + str(strain_num) + ".fa", "w+") as subf:
-			subf.write(">mutated_read_subbed" + str(strain_num) + "\n")
-			subf.write(ref)
-		strain_num += 1
-
-		exit()'''
 
 	else:
 		del potential_mutated

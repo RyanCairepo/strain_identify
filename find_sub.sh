@@ -269,107 +269,116 @@ function extract_sam {
 
 cp /dev/null find_sub_log.txt
 len_limit=$(bc<<<$( tr -d '\r' < "$ref" | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)\*0.7)
-for i in {1..1};do
-    echo "$i $ref $len_limit"
-    #out_dir=round_"$i"_output
-    #contig_dir=round_"$i"_contig
-    if  [ "$out_dir" == "none" ]; then
-        out_dir="${ref##*/}"_output
-    fi
+#for i in {1..1};do
+echo " $ref $len_limit"
+#out_dir=round_"$i"_output
+#contig_dir=round_"$i"_contig
+if  [ "$out_dir" == "none" ]; then
+    out_dir="${ref##*/}"_output
+fi
 
-    echo output dir is  "$out_dir"
-    #rm split_gene*
+echo output dir is  "$out_dir"
+#rm split_gene*
 
-    fL=$( tr -d '\r' < "$ref" | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)
-    if (( $(echo "$fL < $len_limit" | bc -l) )); then
-        echo "gene length $fL too short"
-        exit
-    fi
+fL=$( tr -d '\r' < "$ref" | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)
+if (( $(echo "$fL < $len_limit" | bc -l) )); then
+    echo "gene length $fL too short"
+    exit
+fi
 
-    if [ -d "$out_dir" ]; then
-        echo remove "$out_dir" ? Y/N
+if [ -d "$out_dir" ]; then
+    echo remove "$out_dir" ? Y/N
 
-        if [ $delete == "Y" ]; then
-            if [ -d "$out_dir" ]; then
-                mv "$out_dir" "$out_dir"_del
-                rm -r "$out_dir"
-                mkdir "$out_dir"
-            fi
+    if [ $delete == "Y" ]; then
+        if [ -d "$out_dir" ]; then
+            mv "$out_dir" "$out_dir"_del
+            rm -r "$out_dir"
+            mkdir "$out_dir"
+        fi
 #            if [ -d "$contig_dir" ]; then
 #
 #                rm -r "$contig_dir"
 #            fi
-        else
-            exit
-        fi
     else
-        mkdir "$out_dir"
-    fi
-
-    echo "$ref" "$read1" "$read2" "$mode" "$check_gap" "$aligner" > "$out_dir"/args.txt
-
-
-    build_index
-    alignment
-
-    if [ ! -e "$read" ] && [ "$mode" != "sep" ]; then
-        echo "get matched reads"
-        split_sam gene.sam
-        extract_sam
-    elif [ "$mode" == "sep" ] && [ -e "$read" ]; then
-        extract_sam gene.sam
-        cp extract.sam 1_extract.sam
-        cp full_extract.sam 1_full_extract.sam
-        split_sam gene2.sam
-        extract_sam
-        cat extract.sam >> 1_extract.sam
-        cat full_extract.sam >> 1_full_extract.sam
-        cp 1_extract.sam extract.sam
-        cp 1_full_extract.sam full_extract.sam
-    fi
-    if [ ! -d intermit_out ]; then
-        mkdir intermit_out
-    fi
-    cp extract.sam "$out_dir"/round_"$i"_extract.sam
-    cp full_extract.sam "$out_dir"/round_"$i"_full_extract.sam
-    #--- run correction----
-    #fL=$( awk 'BEGIN{RS="\r\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  ' "$ref" | wc -m)
-    rL=$(awk '{print length($4)}' extract.sam | sort -n | tail -1)
-    a="--gene_L=${fL}";
-    b="--read_L=${rL}";
-    #ref=$(<../${1})
-    #echo $ref
-    match_limit=1 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
-    echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --round=$i --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap} --output_dir=${out_dir}";
-
-    if [ $i -eq 1 ]; then
-        cp /dev/null  "excluded_IDs.txt"
-    fi
-
-    if [ -e "$read1" ] && [ -e "$read2" ]; then
-        python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --output_dir="$out_dir";
-    else
-
-       python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read" --round="$i" --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
-    fi
-    err=$?
-
-    if [ $err -eq 5 ] ; then
-        echo "unable to form contig"
-
-    fi
-
-    if [ $err -ne 0 ] && [ $err -ne 5 ] ; then
-        echo " Error in python program $err"
         exit
     fi
-    subamount=$(wc -l "$out_dir"/paired_real_narrowed_extract.sam)
-    echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
-    cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
-    cp real_narrowed_cvg.txt "$out_dir"/
-    cp nearly_real_narrowed_cvg.txt "$out_dir"/
-    cp thin_* "$out_dir"/
-    cp mutated_read_freq* "$out_dir"/
+else
+    mkdir "$out_dir"
+fi
+
+echo "$ref" "$read1" "$read2" "$mode" "$check_gap" "$aligner" > "$out_dir"/args.txt
+
+
+build_index
+alignment
+
+if [ ! -e "$read" ] && [ "$mode" != "sep" ]; then
+    echo "get matched reads"
+    split_sam gene.sam
+    extract_sam
+elif [ "$mode" == "sep" ] && [ -e "$read" ]; then
+    extract_sam gene.sam
+    cp extract.sam 1_extract.sam
+    cp full_extract.sam 1_full_extract.sam
+    split_sam gene2.sam
+    extract_sam
+    cat extract.sam >> 1_extract.sam
+    cat full_extract.sam >> 1_full_extract.sam
+    cp 1_extract.sam extract.sam
+    cp 1_full_extract.sam full_extract.sam
+fi
+if [ ! -d intermit_out ]; then
+    mkdir intermit_out
+fi
+cp extract.sam "$out_dir"/extract.sam
+cp full_extract.sam "$out_dir"/full_extract.sam
+
+
+#--- run correction----
+#fL=$( awk 'BEGIN{RS="\r\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  ' "$ref" | wc -m)
+rL=$(awk '{print length($4)}' extract.sam | sort -n | tail -1)
+a="--gene_L=${fL}";
+b="--read_L=${rL}";
+#ref=$(<../${1})
+#echo $ref
+match_limit=1 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
+echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap} --output_dir=${out_dir}";
+
+
+
+if [ -e "$read1" ] && [ -e "$read2" ]; then
+    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --output_dir="$out_dir";
+else
+
+   python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
+fi
+err=$?
+
+if [ $err -eq 5 ] ; then
+    echo "unable to form contig"
+
+fi
+
+if [ $err -ne 0 ] && [ $err -ne 5 ] ; then
+    echo " Error in python program $err"
+    exit
+fi
+subamount=$(wc -l "$out_dir"/paired_real_narrowed_extract.sam)
+echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
+#after obtaining sub_read_candidates.sam from strain_finder.py
+#generate compact fastq files for strain identification
+python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
+
+#combining other SRR here
+# loop strain number
+python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "half_real_R1.fastq" "half_real_R2.fastq" 0
+
+
+cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
+cp real_narrowed_cvg.txt "$out_dir"/
+cp nearly_real_narrowed_cvg.txt "$out_dir"/
+cp thin_* "$out_dir"/
+cp mutated_read_freq* "$out_dir"/
 
 
 #    "${DIR}"/megahit/build/megahit -1 "$out_dir"/half_real_R1.fastq -2 "$out_dir"/half_real_R2.fastq -o "$contig_dir"
@@ -389,4 +398,4 @@ for i in {1..1};do
 #    ref="$out_dir"/round_"$i"_contig.fa
 
 
-done
+#done

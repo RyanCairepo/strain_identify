@@ -1,3 +1,4 @@
+import collections
 import copy
 import os, random, time, sys
 import multiprocessing as mp
@@ -145,7 +146,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 		reads = []
 		for i0 in range(len(all_read)):
 			reads.append(all_read[i0][3])
-		freq_reads = Counter(reads)
+		freq_reads = collections.Counter(reads)
 
 		for i in range(len(all_read)):
 			exclude = False
@@ -158,6 +159,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 			cigar_str = re.findall(r"[0-9]+[MIDSH]", cigar)
 			blk_pos = []
 			blk_type = []
+			blk_length = []
 			ini = 0
 			tmp_length = 0
 			base_length = 0
@@ -176,6 +178,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 				blk_type.append(bt)
 
 				blk_pos.append(bl)
+				blk_length.append(int(m.group(1)))
 				ini = bl
 				# if iread[4]=="140M2D10M":
 				#	print(block, int(m.group(1)))
@@ -217,18 +220,18 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 						print(j - reduce, len(sam_q), i)
 						exit(1)
 
-
 				elif blk_type[c] == "I":
 					inserts.append(dict_tonu[sam_q[j - reduce]])
 				elif blk_type[c] == "S":
-
 					sam_q_num.append(dict_tonu[sam_q[j - reduce]])
-				elif blk_type[c] == "H":
-					sam_q_num.append(0)
-				elif blk_type[c] == "D":
+
+				elif blk_type[c] == "D" or  blk_type[c] == "H":
 					inserted_read =  iread[3][:curr_pos]+"-"+iread[3][curr_pos:]
 					iread[3] = inserted_read
-					sam_q_num.append(6)
+					if blk_type[c] == "D":
+						sam_q_num.append(6)
+					else:
+						sam_q_num.append(0)
 				if blk_type[c] == "H" or blk_type[c] == "D":
 					reduce += 1
 
@@ -249,6 +252,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 					c += 1
 					if c == len(blk_type):
 						break
+
 				curr_pos += 1
 			if blk_type[0] == "S":
 				if index - blk_pos[0] < 0:
@@ -657,7 +661,7 @@ def marking_byid(read_num, cvg, narrowed_read, marked_id, col=0):
 
 			marked += 1
 	return marked_id, narrowed_read
-
+'''
 def collecting_bubbles(read_num,read_list,brute_force=False):
 	collected_reads = []
 	if len(read_num) == 0:
@@ -673,7 +677,7 @@ def collecting_bubbles(read_num,read_list,brute_force=False):
 				read_list[i][markbit] = True
 
 	return collected_reads,read_list
-
+'''
 def get_bubble_reads(r1_file, r2_file, read_list, out_dir,rc_file):
 	read_set = set({})
 	rc_read_set = set({})
