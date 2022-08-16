@@ -194,12 +194,13 @@ if __name__ == "__main__":
 
 	#real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, False)
 	# del initial_matrix_info
-	#intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
-	intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
+	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
+	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed,match_limit,marked_id,False,intermit_matrix_info,"nearly_real_narrowed")
 
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id)
-	intermit_matrix_info.real_narrowed_read = paired_real_narrowed
+	intermit_matrix_info.real_narrowed_read = real_narrowed
+	#intermit_matrix_info.real_narrowed_read = paired_real_narrowed
 	intermit_matrix_info.nearly_real_narrowed_read = nearly_real_narrowed
 	#intermit_matrix_info.narrowed_read = copy.deepcopy(initial_matrix_info.narrowed_read)
 	#intermit_matrix_info.narrowed_matrix = initial_matrix_info.real_narrowed_matrix.copy()
@@ -258,7 +259,7 @@ if __name__ == "__main__":
 		smr_index = 0
 		misP =[]
 		added_read = set({})
-		#reduced_sorted_mutated_read = []
+		reduced_sorted_mutated_read = []
 		for smr_index in range(len(sorted_mutated_read)):
 			if sorted_mutated_read[smr_index][read_field] in added_read:
 
@@ -298,6 +299,9 @@ if __name__ == "__main__":
 					break
 				tmp = np.squeeze(rn_matrix.getcol(i).toarray())
 				read_num = np.nonzero(tmp)[0]
+				for num in read_num:
+					if intermit_matrix_info.real_narrowed_read[num][3] not in included_reduced_smr:
+						reduced_sorted_mutated_read.extend(intermit_matrix_info.real_narrowed_read[num])
 				#reduced_sorted_mutated_read.extend([intermit_matrix_info.real_narrowed_read[x] for x in read_num if intermit_matrix_info.real_narrowed_read[x][3] not in included_reduced_smr])
 				#included_reduced_smr.add(intermit_matrix_info.real_narrowed_read[x][3] for x in read_num )
 
@@ -361,7 +365,7 @@ if __name__ == "__main__":
 		#assemble
 
 
-		pos_sorted_mutated_read =copy.deepcopy(sorted_mutated_read)
+		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
 		#exclude reads with N
 		with open(out_dir+"sub_read_candidate.sam","w+") as candf:
 			for line in pos_sorted_mutated_read:
