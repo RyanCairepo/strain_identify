@@ -92,8 +92,8 @@ echo "building index for $ref"
 
 if [ "$aligner" == "bowtie2"  ]; then
     echo
-    #mkdir ${DIR}/bowtie2_index
-    #rm ${DIR}/bowtie2_index/*
+    touch -d ${DIR}/bowtie2_index
+    rm ${DIR}/bowtie2_index/*
     ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2-build --large-index $ref ${DIR}/bowtie2_index/reference_index
 elif [ "$aligner" == "minimap2" ]; then
 
@@ -341,13 +341,13 @@ a="--gene_L=${fL}";
 b="--read_L=${rL}";
 #ref=$(<../${1})
 #echo $ref
-match_limit=1 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
+match_limit=0.7 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
 echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap} --output_dir=${out_dir}";
 
 
 
 if [ -e "$read1" ] && [ -e "$read2" ]; then
-    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --output_dir="$out_dir";
+    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --output_dir="$out_dir";
 else
 
    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
@@ -367,11 +367,16 @@ subamount=$(wc -l "$out_dir"/paired_real_narrowed_extract.sam)
 echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
 #after obtaining sub_read_candidates.sam from strain_finder.py
 #generate compact fastq files for strain identification
-python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
 
+if [ $check_gap == "False" ] ; then
+    python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
+
+else
+    exit
+fi
 #combining other SRR here
 # loop strain number
-python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "half_real_R1.fastq" "half_real_R2.fastq" 0
+#python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "half_real_R1.fastq" "half_real_R2.fastq" 3
 
 
 cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt

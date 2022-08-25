@@ -16,6 +16,8 @@ import copy
 # import matplotlib.pyplot as plt
 from typing import Counter
 
+import identify_verify
+
 id_field = 0
 flag_field = 1
 index_field = 2
@@ -69,7 +71,7 @@ def get_arguments():
 	parser.add_argument("--narrowing", type=str, default="False")
 	parser.add_argument("--domin_l", type=float, default=0.5)
 	parser.add_argument("--count_l", type=int, default=10)
-	parser.add_argument("--match_l", type=float, default=0)
+	parser.add_argument("--match_l", type=float, default=0.7)
 	# parser.add_argument("--first_r", type=bool, default=True)
 	parser.add_argument("--r1_file", type=str)
 	parser.add_argument("--r2_file", type=str, default="")
@@ -124,7 +126,7 @@ if __name__ == "__main__":
 	count_threshold = args.count_l
 	start = 0
 	domin_threshold = args.domin_l
-	match_limit = args.match_l
+	match_limit = float(args.match_l)
 	threshold = 0.025
 	# first_round = args.first_r
 	readfile1 = args.r1_file
@@ -180,9 +182,14 @@ if __name__ == "__main__":
 		print("no marked read?")
 	else:
 		print(len(marked_id), "reads already marked")
+
 	read_list = bm.read_sam(R_file)
 
-	initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True)
+	if args.check_gap != "False":
+		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True, True,target="raw")
+
+	else:
+		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id)
 	prev_time = time.time()
 
 
@@ -253,23 +260,101 @@ if __name__ == "__main__":
 			for k,v in sorted(mutated_read_freq.items(),key= lambda x:x[1]):
 				if v > 0:
 					mrfreq.write(k+": "+str(v)+"\n")
+		for tr in sorted_mutated_read:
+			tr.append(mutated_read_freq[tr[read_field]])
 
-		print({k:v for k,v in mutated_read_freq.items() if v > 1 })
+		misPs,misP_source,misP_reads,sorted_mutated_read = identify_verify.get_misp(ref, sorted_mutated_read)
+		#print({k:v for k,v in mutated_read_freq.items() if v > 1 })
 		#print(sorted_mutated_read)
 		smr_index = 0
 		misP =[]
 		added_read = set({})
 		reduced_sorted_mutated_read = []
+
+		endpoints = '''266..21555
+		21563..25384
+		25393..26220
+		26245..26472
+		26523..27191
+		27202..27387
+		27394..27759
+		27756..27887
+		27894..28259
+		28274..29533
+		29558..29674'''
+		endpoints_list = endpoints.split("\n")
+		protein_loc = []  # (265,21555)
+		for se in endpoints_list:
+			start = se.split("..")[0]
+			end = se.split("..")[1]
+			protein_loc.append(range(int(start) - 1, int(end) - 1))
+
 		for smr_index in range(len(sorted_mutated_read)):
 			if sorted_mutated_read[smr_index][read_field] in added_read:
 
 				continue
 			else:
-				added_read.add(sorted_mutated_read[smr_index][3])
+				added_read.add(sorted_mutated_read[smr_index][read_field])
 			#print(smr_index,sorted_mutated_read[smr_index])
-
 			tmp_misP = []
 			smr_read_index = sorted_mutated_read[smr_index][index_field]-1
+			insertion = False
+			if "I" not in sorted_mutated_read[smr_index][cigar_field]:
+				#get misp list for this read
+				tmp_misP = [list(x.items())[0][0] for x in sorted_mutated_read[smr_index][misp_field]]
+
+			else:
+				#currently not handle insertion reads
+				insertion = True
+				#continue
+			if not insertion:
+				tmp_misP_set = set(tmp_misP)
+				stop_con = False
+				for mp in tmp_misP:
+					found = False
+
+					#for protein_pos in protein_loc:
+					for r in protein_loc:
+						# move bases inside this protein region only
+
+						if mp in r and mp < r.stop-2:
+							found = True
+							# location = int((pos-r.start)/3)
+							index = (mp - r.start) % 3
+
+							ref_codon = ref[mp - index:mp + (3 - index)]
+							if sorted_mutated_read[smr_index][read_field][mp-smr_read_index] != "-":
+								#need to consider multiple misp together
+								mut_codon = ""
+
+								# mut_codon = ref_codon[0:index] + sorted_mutated_read[smr_index][read_field][mp-smr_read_index] + ref_codon[index + 1:]
+								for i in range(mp-index,mp+(3-index)):
+									# if the adjacent spots are also misPs, will use the read's adjecent spot instead of ref
+									if i in tmp_misP_set and 0 <= i-smr_read_index < len(sorted_mutated_read[smr_index][read_field]):
+										mut_codon += sorted_mutated_read[smr_index][read_field][i-smr_read_index]
+									else:
+										mut_codon += ref[i]
+
+								if mut_codon == "TAA":
+									print("stop codon produced by",sorted_mutated_read[smr_index], tmp_misP)
+									stop_con = True
+									break
+							#else:
+
+								#mut_codon = ref_codon[mp - index:mp] + ref[mp + 1:pos + (3 - index) + 1]
+
+							# avoid stop condon produced by substitution
+						if stop_con or found:
+							break
+				if stop_con:
+					continue
+				reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
+			else:
+				#insertion read included
+
+				reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
+
+			'''
 			for i,base in enumerate(sorted_mutated_read[smr_index][read_field]):
 				if ref[smr_read_index+i]!= base and smr_read_index+1 in spike_range:
 
@@ -287,8 +372,9 @@ if __name__ == "__main__":
 				print("not a  mutation in spike range,continue")
 				continue
 			tmp_misP = reduced_tmp_misP
-
+			
 			otherside_potential_mutated =[]
+			
 			#print(intermit_matrix_info.real_narrowed_matrix.shape)
 			del i
 			rn_matrix = intermit_matrix_info.real_narrowed_matrix
@@ -300,13 +386,13 @@ if __name__ == "__main__":
 				tmp = np.squeeze(rn_matrix.getcol(i).toarray())
 				read_num = np.nonzero(tmp)[0]
 				for num in read_num:
-					if intermit_matrix_info.real_narrowed_read[num][3] not in included_reduced_smr:
+					if intermit_matrix_info.real_narrowed_read[num][read_field] not in included_reduced_smr:
 						reduced_sorted_mutated_read.extend(intermit_matrix_info.real_narrowed_read[num])
 				#reduced_sorted_mutated_read.extend([intermit_matrix_info.real_narrowed_read[x] for x in read_num if intermit_matrix_info.real_narrowed_read[x][3] not in included_reduced_smr])
 				#included_reduced_smr.add(intermit_matrix_info.real_narrowed_read[x][3] for x in read_num )
 
 
-				'''
+				
 				tmp_otherside, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(read_num), intermit_matrix_info.real_narrowed_read, True)
 				otherside_potential_mutated.extend(tmp_otherside)
 			
@@ -366,11 +452,13 @@ if __name__ == "__main__":
 
 
 		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
+		pos_sorted_mutated_read = identify_verify.fix_s_pos(pos_sorted_mutated_read,restore=True)
 		#exclude reads with N
 		with open(out_dir+"sub_read_candidate.sam","w+") as candf:
 			for line in pos_sorted_mutated_read:
+				#print(line)
 				if "N" not in line[read_field]:
-					candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " " + str(mutated_read_freq[line[3]]) +" "+ "\n")
+					candf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " " + str(mutated_read_freq[line[3]]) + "\n")
 
 		rn_cvg_list= []
 		nearly_rn_cvg_list = []

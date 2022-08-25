@@ -13,6 +13,9 @@ from typing import Counter
 import itertools as its
 from dataclasses import dataclass, field
 
+import identify_verify
+import strain_finder as st
+
 
 @dataclass
 class Matrix_info:
@@ -55,19 +58,139 @@ markbit = 5
 # half_real_reads = []
 # half_real_ID = set({})
 
-def read_sam(R_file):
-	r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
-	read_number = r.shape[0]
-	# real_len = [0] *read_number
-	read_list = []
-	for i in range(read_number):
-		read_list.append([str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
-						  str(r["cigar"].loc[i]), False])
+def handle_read(read,match_limit,target):
+	"""
+	adjust read index according to cigar string, move out insertion, add "-" for deletion
 
+	:param read:
+	:return:
+	"""
+	insertion = []
+	index = int(read[st.index_field]) - 1
+
+	sam_q = read[st.read_field]
+	cigar = read[st.cigar_field]
+	cigar_str = re.findall(r"[0-9]+[MIDSH]", cigar)
+	blk_pos = []
+	blk_type = []
+	blk_length = []
+	ini = 0
+	tmp_length = 0
+	base_length = 0
+	matched = 0
+	for block in cigar_str:
+		m = re.search(r'([0-9]+)([MIDSH])', block)
+		bl = int(m.group(1)) + ini
+		bt = str(m.group(2))
+		# if bt == "S" or bt == "H":
+		#    continue
+		if target == "raw" and bt == "M" or bt == "I" or bt == "D":
+			matched += int(m.group(1))
+		else:
+			if bt == "M":  # or bt=="I" or bt=="D":
+				matched += int(m.group(1))
+		blk_type.append(bt)
+
+		blk_pos.append(bl)
+		blk_length.append(int(m.group(1)))
+		ini = bl
+
+		base_length += int(m.group(1))
+		if bt != "I" and bt != "H":
+			tmp_length += int(m.group(1))  # get read length without counting clipped bases
+
+
+
+	# print("sam_q:", sam_q, "\n")
+
+	# configuring sam_q_num for matrix
+	sam_q_num = []
+
+	# softclipping adjust index position
+	s_start = 0
+	s_end = 0
+
+	c = 0
+	inserts = []
+	begin = 0
+	reduce = 0  # deduct "non-existent" bases in total length, "D" and "H" not shown in reads
+	curr_pos = 0
+	for j in range(0, blk_pos[-1]):  # change here to fill the blank with 0?
+
+		if blk_type[c] == "M":
+			try:
+				sam_q_num.append(dict_tonu[sam_q[j - reduce]])
+			except:
+				print(j - reduce, len(sam_q),read)
+				exit(1)
+
+		elif blk_type[c] == "I":
+			inserts.append(dict_tonu[sam_q[j - reduce]])
+		elif blk_type[c] == "S":
+			sam_q_num.append(dict_tonu[sam_q[j - reduce]])
+
+		elif blk_type[c] == "D" or blk_type[c] == "H":
+			inserted_read = read[st.read_field][:curr_pos] + "-" + read[st.read_field][curr_pos:]
+			read[st.read_field] = inserted_read
+			if blk_type[c] == "D":
+				sam_q_num.append(6)
+			else:
+				sam_q_num.append(0)
+		if blk_type[c] == "H" or blk_type[c] == "D":
+			reduce += 1
+
+		if j == blk_pos[c] - 1:  # update start and c, put inserts into hashtable
+
+			if blk_type[c] == "I":
+
+				insertion.append(index + begin, copy.deepcopy(inserts))
+			begin = blk_pos[c]
+			inserts = []
+
+			c += 1
+			if c == len(blk_type):
+				break
+
+		curr_pos += 1
+	if blk_type[0] == "S":
+		if index - blk_pos[0] < 0:
+
+			start_pos = blk_pos[0] - index
+			tmp_length -= start_pos
+			sam_q_num = sam_q_num[start_pos:]
+
+		else:
+			index = index - blk_pos[0]
+
+
+	'''
+	if len(sam_q_num) < read_length:
+		added_read.update({i: len(sam_q_num)})
+		sam_q_num += [0] * (read_length - len(sam_q_num))
+		pad = 0
+	else:
+		pad = len(sam_q_num) - read_length
+	'''
+
+def read_sam(R_file,freq=False):
+	read_list = []
+	if not freq:
+		r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
+	else:
+		r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar','freq'], encoding='unicode_escape')
+	read_number = r.shape[0]
+		# real_len = [0] *read_number
 	print("r is", r)
+	for i in range(read_number):
+		read = [str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
+						  str(r["cigar"].loc[i])]
+		if freq:
+			read.append(int(str(r['freq'].loc[i])))
+		read_list.append(read)
+
+
 
 	return read_list
-
 
 def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_info=None, target="real_narrowed"):
 	# global narrowed_read,maxposition, read_number,row,val,col
@@ -143,6 +266,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 
 	else:
 		# initializing by selecting reads with match_limit
+		#print(match_limit,print(target))
 		reads = []
 		for i0 in range(len(all_read)):
 			reads.append(all_read[i0][3])
@@ -195,7 +319,11 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 					if  not (freq_reads[sam_q] > 1 and iread[0] not in marked_id):
 						exclude = True
 						continue
-
+			else: #handle combined SRR
+				if (matched / base_length < match_limit):
+					exclude = True
+					continue
+			print(target,iread,base_length,matched,matched/base_length)
 			narrowed.append(iread)
 			# print("sam_q:", sam_q, "\n")
 
@@ -264,6 +392,8 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 						print("tmp_length", tmp_length, "base_length", base_length)
 				else:
 					index = index - blk_pos[0]
+
+
 			'''
 			if len(sam_q_num) < read_length:
 				added_read.update({i: len(sam_q_num)})
@@ -301,19 +431,25 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 					insertion_lengths[starting_index] = len(insertion_tuple[1])
 		extra_col_possible = sum(insertion_lengths.values())
 
+
 		info_collection = Matrix_info(max_shape=(included_i, maxposition + extra_col_possible),
 									  row=np.array(row_l), col=np.array(col_l), val=np.array(val_l),
 									  narrowed_read=narrowed, insertion_reads=insertion_reads,
 									  marked_id=marked_id)
 		# print(np.bincount(info_collection.val))
-		csc = sp.coo_matrix((info_collection.val, (info_collection.row, info_collection.col))).tocsc()  # matrix
-		print("max position at", info_collection.maxposition, info_collection.col[-1], maxindex)
+		if len(info_collection.val) > 0:
+			csc = sp.coo_matrix((info_collection.val, (info_collection.row, info_collection.col))).tocsc()  # matrix
+			print("max position at", info_collection.maxposition, info_collection.col[-1], maxindex)
+		else:
+			csc = sp.coo_matrix((0,0)).tocsc()
+
 		print("insertion_reads", len(insertion_reads))
 		print("csc shape", csc.shape)
 		info_collection.narrowed_matrix = csc.copy()
 
 	#	if initial:
 	#		narrowed_read = narrowed.copy()
+
 	return info_collection
 
 
@@ -523,11 +659,11 @@ def narrow_reads(ref, narrowed_read, out_dir, brute_force=True):
 			if re.match('^[0-9]+[M]$', rl[4]):
 
 				nearly_true_total.append(copy.deepcopy(rl))
-				narrowed_read[ri][4] = rl[4]+"*"
+				#narrowed_read[ri][4] = rl[4]+"*"
 			else:
 				if read_ferq[rl[3]] > 1:
 					nearly_true_total.append(copy.deepcopy(rl))
-					narrowed_read[ri][4] = rl[4] + "*"
+					#narrowed_read[ri][4] = rl[4] + "*"
 
 
 	print(len(true_total_match), " truely matched reads in real_narrowed_extract.sam")
