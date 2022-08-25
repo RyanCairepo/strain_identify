@@ -186,7 +186,7 @@ if __name__ == "__main__":
 	read_list = bm.read_sam(R_file)
 
 	if args.check_gap != "False":
-		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True, True,target="raw")
+		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True,target="raw")
 
 	else:
 		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id)

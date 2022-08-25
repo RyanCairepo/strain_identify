@@ -1151,7 +1151,7 @@ def misp_syno(ref_file,sub_file,misp_file,code_file):
 			if line[0] != ">":
 				ref += line.strip()
 	subbed_read = bm.read_sam(sub_file,True)
-	misP,misp_source,misp_reads,subbed_read = identify_verify.get_misp(ref, subbed_read, False)
+	misP,misp_source,misp_reads,subbed_read = get_misp(ref, subbed_read, False)
 	syn_stat = {}
 	move = []
 	for pos,clist in misP.items():
