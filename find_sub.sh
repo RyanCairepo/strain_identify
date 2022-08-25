@@ -376,7 +376,7 @@ else
 fi
 #combining other SRR here
 # loop strain number
-#python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "half_real_R1.fastq" "half_real_R2.fastq" 3
+python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "half_real_R1.fastq" "half_real_R2.fastq" 2
 
 
 cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
