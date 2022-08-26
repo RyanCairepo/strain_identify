@@ -135,7 +135,30 @@ class TestSubmit(unittest.TestCase):
         for key in misPs:
             assert key in old_misPs.keys()
             assert misPs[key][0] == old_misPs[key][0]
+    def test_consecMisp(self):
+        readlist = bm.read_sam(filelist[1])
+        ref = identify_verify.get_ref_seq(filelist[0])
+        misP,misP_source,misP_reads, new_readlist = identify_verify.get_misp(ref,readlist)
+        consec_misp_reads = []
+        last_pos = 0
+        curr_count = 0
+        sorted_pos = sorted(list(misP_reads.keys()))
+        added_read = set({})
+        for ip,pos in enumerate(sorted_pos):
+            if ip>0:
+                if pos - last_pos <= 3:
+                    curr_count += 1
+                else:
+                    if curr_count > 10:
+                        #print(curr_count,ip,[sorted_pos[x] for x in range(ip-curr_count,ip)],misP_reads[sorted_pos[ip-curr_count+1]])
+                        if list(misP_reads[sorted_pos[ip-1]].values())[0][0][3] not in added_read:
+                            added_read.add(list(misP_reads[sorted_pos[ip-1]].values())[0][0][3])
+                            consec_misp_reads.extend([list(misP_reads[sorted_pos[x]].values())[0][0] for x in range(ip-curr_count,ip) ])
+                    curr_count = 0
 
+            last_pos = pos
+        for i in consec_misp_reads:
+            print(i)
 if __name__ == '__main__':
     #parser = argparse.ArgumentParser()
 
