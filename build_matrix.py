@@ -58,122 +58,19 @@ markbit = 5
 # half_real_reads = []
 # half_real_ID = set({})
 
-def handle_read(read,match_limit,target):
-	"""
-	adjust read index according to cigar string, move out insertion, add "-" for deletion
 
-	:param read:
-	:return:
-	"""
-	insertion = []
-	index = int(read[st.index_field]) - 1
-
-	sam_q = read[st.read_field]
-	cigar = read[st.cigar_field]
-	cigar_str = re.findall(r"[0-9]+[MIDSH]", cigar)
-	blk_pos = []
-	blk_type = []
-	blk_length = []
-	ini = 0
-	tmp_length = 0
-	base_length = 0
-	matched = 0
-	for block in cigar_str:
-		m = re.search(r'([0-9]+)([MIDSH])', block)
-		bl = int(m.group(1)) + ini
-		bt = str(m.group(2))
-		# if bt == "S" or bt == "H":
-		#    continue
-		if target == "raw" and bt == "M" or bt == "I" or bt == "D":
-			matched += int(m.group(1))
-		else:
-			if bt == "M":  # or bt=="I" or bt=="D":
-				matched += int(m.group(1))
-		blk_type.append(bt)
-
-		blk_pos.append(bl)
-		blk_length.append(int(m.group(1)))
-		ini = bl
-
-		base_length += int(m.group(1))
-		if bt != "I" and bt != "H":
-			tmp_length += int(m.group(1))  # get read length without counting clipped bases
-
-
-
-	# print("sam_q:", sam_q, "\n")
-
-	# configuring sam_q_num for matrix
-	sam_q_num = []
-
-	# softclipping adjust index position
-	s_start = 0
-	s_end = 0
-
-	c = 0
-	inserts = []
-	begin = 0
-	reduce = 0  # deduct "non-existent" bases in total length, "D" and "H" not shown in reads
-	curr_pos = 0
-	for j in range(0, blk_pos[-1]):  # change here to fill the blank with 0?
-
-		if blk_type[c] == "M":
-			try:
-				sam_q_num.append(dict_tonu[sam_q[j - reduce]])
-			except:
-				print(j - reduce, len(sam_q),read)
-				exit(1)
-
-		elif blk_type[c] == "I":
-			inserts.append(dict_tonu[sam_q[j - reduce]])
-		elif blk_type[c] == "S":
-			sam_q_num.append(dict_tonu[sam_q[j - reduce]])
-
-		elif blk_type[c] == "D" or blk_type[c] == "H":
-			inserted_read = read[st.read_field][:curr_pos] + "-" + read[st.read_field][curr_pos:]
-			read[st.read_field] = inserted_read
-			if blk_type[c] == "D":
-				sam_q_num.append(6)
-			else:
-				sam_q_num.append(0)
-		if blk_type[c] == "H" or blk_type[c] == "D":
-			reduce += 1
-
-		if j == blk_pos[c] - 1:  # update start and c, put inserts into hashtable
-
-			if blk_type[c] == "I":
-
-				insertion.append(index + begin, copy.deepcopy(inserts))
-			begin = blk_pos[c]
-			inserts = []
-
-			c += 1
-			if c == len(blk_type):
-				break
-
-		curr_pos += 1
-	if blk_type[0] == "S":
-		if index - blk_pos[0] < 0:
-
-			start_pos = blk_pos[0] - index
-			tmp_length -= start_pos
-			sam_q_num = sam_q_num[start_pos:]
-
-		else:
-			index = index - blk_pos[0]
-
-
-	'''
-	if len(sam_q_num) < read_length:
-		added_read.update({i: len(sam_q_num)})
-		sam_q_num += [0] * (read_length - len(sam_q_num))
-		pad = 0
-	else:
-		pad = len(sam_q_num) - read_length
-	'''
 
 def read_sam(R_file,freq=False):
 	read_list = []
+	with open(R_file,"r") as rf:
+		for line in rf:
+			if len(line.strip().split(" ")) == 5:
+				freq = True
+			elif len(line.strip().split(" ")) == 6:
+				freq = False
+			else:
+				assert "sam file format error, should contain 5 or 6 columns of data. please re run find_sub.sh"
+			break
 	if not freq:
 		r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
 	else:

@@ -1012,81 +1012,6 @@ def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_f
 	return misp_conflict
 
 
-def single_gap_reads(ref_file, candidate_sam, readfile1, readfile2):
-	"""
-	Find each read that substituted independently with no support
-	:param ref:
-	:param strain:
-	:param samfile:
-	:param readfile1:
-	:param readfile2:
-	:return:
-	"""
-	misp_bit = 6
-	# strain = 2
-
-	readlist = []
-
-
-
-
-	ref_seq = ""
-	with open(ref_file, "r") as rf:
-		for line in rf:
-			if line[0] != ">":
-				ref_seq += line.strip()
-	ref = ref_seq
-
-	for ir, read in enumerate(readlist):
-		tmp_misP = []
-		read_index = int(read[2]) - 1
-		for i, base in enumerate(read[3]):
-			if ref[read_index + i] != base:
-				tmp_misP.append(read_index + i)
-		for mp in tmp_misP:
-			read.append((int(mp), ref[mp], read[3][mp - read_index]))
-	misPs, misP_source, misP_reads, new_readlist = get_misp(ref, readlist, False)
-	readlist = new_readlist
-	print(len(readlist), "candidate reads")
-
-
-	# while len(readlist) > 0:
-	subbed_read = []
-	misPs = []
-	ref = ref_seq
-	covered_pos = {}
-	for batch, read in enumerate(readlist):
-		# if batch <= 1302:
-		#   continue
-		overlap = False
-		read_index = int(read[2]) - 1
-		read_misPs = [int(x[0]) for x in read[misp_bit:]]
-
-		print("curr read", batch, read, "bases covered", len(covered_pos))
-		if len(subbed_read) > 0:
-			# read clash detection, find all overlapping reads
-
-			# mp-clash, compare all MPs, if the reads only itroduce new MP outise current mp range
-
-			if if_clash(read,covered_pos):
-				batch += 1
-				continue
-
-		temp_ref = ref[:read_index] + read[3] + ref[read_index + len(read[3]):]
-		# print(editdistance.eval(temp_ref,ref))
-		if verify_seq_support(temp_ref,batch,readfile1,readfile2):
-
-			print(batch, "no gaps for curr read\n")
-			subbed_read.append(read)
-		# print(len(covered_pos),covered_pos.keys())
-		# print(subbed_read,len(readlist))
-		batch += 1
-
-	with open("single_valid_read.sam", "w+") as bf:
-		for line in subbed_read:
-			bf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " " + str(
-				line[5]) + "\n")
-
 
 def write_sam(readlist, filename, mode="w+",restore_pos=False):
 	if restore_pos:
@@ -1235,15 +1160,15 @@ if __name__ == "__main__":
 
 	strain_max = int(sys.argv[5])
 	for strain in range(0,strain_max+1):
-		identify_strain(sys.argv[1], strain, sys.argv[2], sys.argv[3], sys.argv[4])
-		subprocess.run("rm -r batch_*",stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
-		other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_"+str(strain)+"_reference.fa"
-		other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+		#identify_strain(sys.argv[1], strain, sys.argv[2], sys.argv[3], sys.argv[4])
+		#subprocess.run("rm -r batch_*",stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
+		#other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_"+str(strain)+"_reference.fa"
+		#other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
 
 
 		backup_command = "cp subbed_reads_"+str(strain)+".sam subbed_reads_"+str(strain)+".sam.original; cp final_strain_"+str(strain) \
 			+ "_reference.fa final_strain_"+str(strain)+"_reference.fa.original"
-		backup_proc = subprocess.run(backup_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,shell=True)
+		#backup_proc = subprocess.run(backup_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,shell=True)
 
 		fac_verify_misp(sys.argv[1], "combine_final_strain_" + str(strain) + "_reference.fa_extract.sam",
 						"subbed_reads_" + str(strain) + ".sam", "final_strain_" + str(strain) + "_reference.fa",
