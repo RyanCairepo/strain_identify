@@ -65,12 +65,13 @@ def read_sam(R_file,freq=False):
 	with open(R_file,"r") as rf:
 		for line in rf:
 			if len(line.strip().split(" ")) == 5:
-				freq = True
-			elif len(line.strip().split(" ")) == 6:
 				freq = False
+			elif len(line.strip().split(" ")) == 6:
+				freq = True
 			else:
 				assert "sam file format error, should contain 5 or 6 columns of data. please re run find_sub.sh"
 			break
+	#print(freq)
 	if not freq:
 		r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
 	else:
@@ -163,10 +164,10 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 
 	else:
 		# initializing by selecting reads with match_limit
-		#print(match_limit,print(target))
+		print("match_limit is ",match_limit)
 		reads = []
 		for i0 in range(len(all_read)):
-			reads.append(all_read[i0][3])
+			reads.append(all_read[i0][st.read_field])
 		freq_reads = collections.Counter(reads)
 
 		for i in range(len(all_read)):
@@ -191,7 +192,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 				bt = str(m.group(2))
 				# if bt == "S" or bt == "H":
 				#    continue
-				if target == "raw" and bt == "M" or bt=="I" or bt=="D":
+				if target == "raw" and bt == "M":# or bt=="I" or bt=="D"):
 					matched += int(m.group(1))
 				else:
 					if bt == "M":  # or bt=="I" or bt=="D":
@@ -213,14 +214,14 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 					# if(matched/read_length<match_limit):
 
 					# print(i,str(r.loc[i]), matched)
-					if  not (freq_reads[sam_q] > 1 and iread[0] not in marked_id):
+					if  not (freq_reads[sam_q] > 1 and index+len(sam_q)<st.gene_length and iread[0] not in marked_id):
 						exclude = True
 						continue
 			else: #handle combined SRR
 				if (matched / base_length < match_limit):
 					exclude = True
 					continue
-			print(target,iread,base_length,matched,matched/base_length)
+			#print(target,iread,base_length,matched,matched/base_length)
 			narrowed.append(iread)
 			# print("sam_q:", sam_q, "\n")
 

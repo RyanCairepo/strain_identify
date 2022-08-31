@@ -19,6 +19,7 @@ def fix_s_pos(subbed_reads,restore=False):
 	new_subbed_reads = []
 	for ir, fields in enumerate(subbed_reads):
 		tmp_read = copy.deepcopy(fields)
+		assert tmp_read[2] == fields[2]
 
 		index = int(fields[st_find.index_field]) - 1
 		cigar = fields[st_find.cigar_field]
@@ -131,9 +132,10 @@ def verify_seq_support(temp_ref,batch,readfile1, readfile2):
 	gap_list = verify_proc.stdout.split("\n")[-3]
 	if gap_list != "no gaps":
 
-		print(gap_list)
+
 		gap_list = re.sub('[\[\]]', '', gap_list)
-		print(gap_list.split(",")[:-1])
+		gap_list= gap_list.split(",")[:-1]
+		print(gap_list)
 
 		return gap_list
 	# gap_list = gap_list.split(",")[:-1]
@@ -141,6 +143,25 @@ def verify_seq_support(temp_ref,batch,readfile1, readfile2):
 	# subbed_read.remove(read)
 	else:
 		return []
+
+def write_result(strain, ref_seq, subbed_read, stage=0, restore_pos=False, curr=False):
+	write_seq(ref_seq,"final_strain_" + str(strain) + "_reference.fa")
+	#with open("final_strain_" + str(strain) + "_reference.fa", "w+") as bf:
+	#	bf.write(">final_strain_" + str(strain) + "\n")
+	#	bf.write(ref_seq)
+	#with open("strain_" + str(strain) + "_spike.fa", "w+") as sf:
+	#	sf.write(">strain_" + str(strain) + "_spike" + "\n")
+	#	sf.write(ref_seq[21562:25384])
+	if stage > 0:
+		if curr:
+			write_sam(subbed_read, "curr_stage_"+str(stage)+"_subbed_reads_" + str(strain) + ".sam",restore_pos=restore_pos)
+			write_seq(ref_seq,"curr_stage_"+str(stage)+"_final_strain_" + str(strain) + "_reference.fa")
+
+	write_sam(subbed_read,"subbed_reads_" + str(strain) + ".sam",restore_pos=restore_pos)
+	subprocess.run("rm -r batch_*",shell=True)
+	print(subbed_read)
+
+
 
 def identify_strain(ref_file, strain, candidate_sam, readfile1, readfile2):
 	"""produce and verify new strain, also replace rejected reads
@@ -151,10 +172,6 @@ def identify_strain(ref_file, strain, candidate_sam, readfile1, readfile2):
 	or cause stop codon that separates a protein from the middle
 	"""
 
-	# strain = 2
-	if strain < 0:
-		print("invalid strain number, error")
-		exit(-2)
 	prev_readset = set({})
 	if strain > 0:
 		for i in range(0, strain):
@@ -214,8 +231,8 @@ def identify_strain(ref_file, strain, candidate_sam, readfile1, readfile2):
 				continue
 
 		temp_ref = ref[:read_index] + read[st_find.read_field] + ref[read_index + len(read[st_find.read_field]):]
-
-		if verify_seq_support(temp_ref,batch,readfile1,readfile2):
+		gap_list = verify_seq_support(temp_ref,batch,readfile1,readfile2)
+		if len(gap_list) == 0:
 
 			subbed_read.append(original_readlist[batch])
 			# update covered positions with base in covered_pos
@@ -233,24 +250,18 @@ def identify_strain(ref_file, strain, candidate_sam, readfile1, readfile2):
 
 			ref = temp_ref
 			print(batch, "no gaps for curr read\n")
+		else:
+
+			for gap_pos in gap_list:
+
+				if abs(read_index-int(gap_pos)) > 300:
+					print("gap 300 bases away")
+					print(read, gap_pos)
+					exit()
 
 		batch += 1
 
-	with open("final_strain_" + str(strain) + "_reference.fa", "w+") as bf:
-		bf.write(">final_strain_" + str(strain) + "\n")
-		bf.write(ref)
-	with open("subbed_reads_" + str(strain) + ".sam", "w+") as bf:
-		for line in subbed_read:
-			bf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + " "+str(line[5])+"\n")
-	# subprocess.run("rm -r batch_*",shell=True)
-	print(subbed_read)
-	for read in subbed_read:
-		if read in readlist:
-			readlist.remove(read)
-
-	with open("strain_" + str(strain) + "_spike.fa", "w+") as sf:
-		sf.write(">strain_" + str(strain) + "_spike" + "\n")
-		sf.write(ref[21562:25383])
+	write_result(strain, ref, subbed_read)
 	strain += 1
 
 
@@ -331,6 +342,7 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 
 		for block in cigar_str:
 			m = re.search(r'([0-9]+)([MIDSH])', block)
+
 			bl = int(m.group(1)) + ini
 			bt = str(m.group(2))
 			# if bt == "S" or bt == "H":
@@ -339,7 +351,10 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 			blk_type.append(bt)
 			blk_length.append(int(m.group(1)))
 			blk_pos.append(bl)
-			ini = bl
+			if ini == 0:
+				ini = bl
+			else:
+				ini = bl
 			# if iread[4]=="140M2D10M":
 			#	print(block, int(m.group(1)))
 			base_length += int(m.group(1))
@@ -358,14 +373,14 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 		inserts = []
 		begin = 0 # insertion begin
 
+
 		for j in range(0, blk_pos[-1]):  # change here to fill the blank with 0?
 			# compare base directly, soft clipping at beginning has been accounted
+
 			if blk_type[c] == "M" or blk_type[c] == "S":
 
-				curr_misp= base_compare(ref[read_index + j],read_str[j])
-
-				if len(curr_misp)>0:
-					temp_misp.append({read_index + j:curr_misp})
+				if ref[read_index + j]!=read_str[j]:
+					temp_misp.append({read_index + j:[ref[read_index + j]+"|"+read_str[j]]})
 
 			# handle insertion
 			elif blk_type[c] == "I":
@@ -375,6 +390,7 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 			elif blk_type[c] == "D" or blk_type[c] == "H":
 				temp_misp.append({read_index + j: [ref[read_index  + j] + "|" + read_str[ j]]})
 			if j == blk_pos[c] - 1:  # update start and c, put inserts into hashtable
+				#print(read[0])
 
 				if blk_type[c] == "I":
 					insert_str = ""
@@ -469,7 +485,7 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 	return misPs, misPs_source, misP_reads,read_with_misp
 
 
-def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, candidate_sam):
+def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, candidate_sam,stage=0):
 	"""
 
 	:param ref_file: original ref fa
@@ -478,6 +494,10 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 	:param new_strain_file: generated strain fa
 	:param candidate_sam: sub_read_candidates
 	:return: rejected reads, updated misp_conflict, no_candidate to fill
+	if multiple reads contain same misp,the misp will be accpeted.
+	 if one read contains rejected misp, the read will be rejected, removed from misp_reads
+	 misp with no read support will also be removed from misPs, misp_reads and misp_source
+
 	"""
 	ref = ""
 	with open(new_strain_file, "r") as f:
@@ -485,7 +505,7 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 			if line[0] != ">":
 				temp = line.replace(" ", "").replace("\n", "").replace("\d", "").upper()
 				ref += re.sub('\d', "", temp)
-
+	unvarified_ref = ref
 	ori_ref = ""
 	with open(ref_file, "r") as f:
 		for line in f:
@@ -502,7 +522,9 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 			fields = line.strip().split(" ")
 			subbed_read.append(fields)
 
-	misPs, misPs_source, misP_reads,subbed_read = get_misp(ori_ref, subbed_read)
+	misPs, misPs_source, misP_reads,new_subbed_read = get_misp(ori_ref, subbed_read)
+	original_subbed_read = copy.deepcopy(subbed_read)
+	subbed_read = new_subbed_read
 	if len(test_misp.keys() - misPs.keys()) > 0:
 		print(test_misp)
 		print(misPs)
@@ -531,43 +553,50 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 	#raw_matrix_info.narrowed_read = fix_s_pos(raw_matrix_info.narrowed_read)
 	found_segments = set({})
 	rejected_read = []
+
 	# accepted_misps = set({})
 	accepted_misps = {}
-	for pos, clist in misPs.items():
-		reject = False
-		if pos > matrix.shape[1] or pos in accepted_misps.keys():
-			# print("max index exceeds at ", pos, clist)
-			continue
-		tmp = np.squeeze(matrix.getcol(pos).toarray())
-		tmp_count = np.bincount(tmp)[1:]
-		for change in clist:
+	rejected_misps = {}
+	for ir,read in enumerate(subbed_read):
+		if read_freq[read[st_find.read_field]] > 1:
+			rejected = False
+		else:
+			rejected = True
+		tmp_accepted_misps = {}
+		for misp in read[st_find.misp_field]:
+			pos = list(misp.keys())[0]
+			change = misp[pos][0]
+			if pos in accepted_misps :
+				continue
+			if pos in rejected_misps.keys():
+				if read_freq[read[st_find.read_field]] == 1 and change in set(rejected_misps[pos]):
+					print(read,pos,change,"already rejected, continue",rejected_misps[pos])
+					continue
+			if pos > matrix.shape[1]:
+				print( misp,"out of range")
+				print(matrix.shape)
+				exit()
+			tmp = np.squeeze(matrix.getcol(pos).toarray())
+			tmp_count = np.bincount(tmp)[1:]
+
 			changed_base = change.split("|")[1]
-			support_index = np.where(tmp == st_find.dict_tonu[change.split("|")[1]])
+			support_index = np.where(tmp == st_find.dict_tonu[changed_base])
 			support_count = support_index[0].shape[0]
 			visited_sindex = set({})
 			if support_count > 0:
 				for sp in support_index[0]:
 					temp_read = raw_matrix_info.narrowed_read[sp]
-					# print(temp_read)
-
-					# print(tmp_count)
-					# print(ref[pos-5:pos],ref[pos],ref[pos:pos+5])
-					# print(change,pos,sp,support_index,support_count)
 					read_index = int(temp_read[st_find.index_field]) - 1
-					window = 0
-					tolerance = 1
-					curr_mcount = 0
 					curr = pos
 					read_end = read_index + len(temp_read[st_find.read_field])
 					reached = False
 					l_reached = False
 					l_window = 0
-					l_temp_read = temp_read
+
 
 					r_reached = False
 					r_window = 0
-					r_temp_read = temp_read
-					encountered_misp = []
+
 
 					while curr - 1 >= read_index:
 						try:
@@ -578,19 +607,20 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 								l_reached = True
 								break
 						except:
-							print(curr,temp_read,len(ref))
+							print(curr, temp_read, len(ref))
 							raise "index error"
 						curr -= 1
 					curr_l_line = sp - 1
-					if curr_l_line >= 0 and curr - 1 <= raw_matrix_info.narrowed_read[curr_l_line][st_find.index_field] - 1 + len(
+					if curr_l_line >= 0 and curr - 1 <= raw_matrix_info.narrowed_read[curr_l_line][
+						st_find.index_field] - 1 + len(
 							raw_matrix_info.narrowed_read[curr_l_line][st_find.read_field]):
 						curr_l_read = raw_matrix_info.narrowed_read[curr_l_line]
 					# print(curr_l_read)
 
 					else:
 						l_reached = True
-					#while not l_reached and curr_l_line >= 0:
-					for curr_l_line in range(sp-1,0,-1):
+					# while not l_reached and curr_l_line >= 0:
+					for curr_l_line in range(sp - 1, 0, -1):
 						if l_reached:
 							break
 						if curr_l_line in visited_sindex:
@@ -598,47 +628,39 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 						else:
 							visited_sindex.add(curr_l_line)
 						curr_l_read = raw_matrix_info.narrowed_read[curr_l_line]
-						if curr - 1 < int(curr_l_read[st_find.index_field]) - 1 or curr-1 >=int(curr_l_read[st_find.index_field]) - 1 +len(curr_l_read[st_find.read_field]) :
+						if curr - 1 < int(curr_l_read[st_find.index_field]) - 1 or curr - 1 >= int(
+								curr_l_read[st_find.index_field]) - 1 + len(curr_l_read[st_find.read_field]):
 
 							if curr_l_line - 1 < 0:
 								l_reached = True
 								break
 
-							#curr_l_line -= 1
-							#curr_l_read = raw_matrix_info.narrowed_read[curr_l_line]
-							if curr - 1 > int(curr_l_read[st_find.index_field]) - 1 + len(curr_l_read[st_find.read_field]):
+							if curr - 1 > int(curr_l_read[st_find.index_field]) - 1 + len(
+									curr_l_read[st_find.read_field]):
 								l_reached = True
 								break
 							# if current read does not support the current misp, break
-							if int(curr_l_read[st_find.index_field]) - 1 <= pos <= int(curr_l_read[st_find.index_field]) - 1 + len(curr_l_read[st_find.read_field]) - 1 and \
-									curr_l_read[st_find.read_field][pos - (int(curr_l_read[st_find.index_field]) - 1)] != change.split("|")[1]:
-								# print("read not supporting misp",pos,change)
-								# print(curr_l_read)
-								# l_reached= True
-								#curr_l_line -= 1
-								#if curr_l_line < 0:
-								#	l_reached = True
-								#	break
-								#else:
-								#	curr_l_read = raw_matrix_info.narrowed_read[curr_l_line]
+							if int(curr_l_read[st_find.index_field]) - 1 <= pos <= int(
+									curr_l_read[st_find.index_field]) - 1 + len(curr_l_read[st_find.read_field]) - 1 and \
+									curr_l_read[st_find.read_field][
+										pos - (int(curr_l_read[st_find.index_field]) - 1)] != change.split("|")[1]:
+
 								continue
 
-							# print(curr_l_read)
 							continue
 
 						try:
-							if ref[curr - 1] == curr_l_read[st_find.read_field][curr - 1 - (int(curr_l_read[st_find.index_field]) - 1)]:
+							if ref[curr - 1] == curr_l_read[st_find.read_field][
+								curr - 1 - (int(curr_l_read[st_find.index_field]) - 1)]:
 								l_window += 1
 
 							else:
 								l_reached = True
 								break
 						except:
-							print(curr-1,curr - 1 - (int(curr_l_read[st_find.index_field]) - 1),curr_l_line,curr_l_read,raw_matrix_info.narrowed_read[curr_l_line])
+							print(curr - 1, curr - 1 - (int(curr_l_read[st_find.index_field]) - 1), curr_l_line,
+								  curr_l_read, raw_matrix_info.narrowed_read[curr_l_line])
 							raise "index errror"
-						# except:
-						#    print(curr_l_read,curr-1-(int(curr_l_read[2]-1)))
-						#    exit()
 						curr -= 1
 					l_seg = ref[curr:pos]
 					curr = pos
@@ -657,11 +679,10 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 							raw_matrix_info.narrowed_read[curr_r_line][st_find.index_field] - 1 <= curr + 1:
 
 						curr_r_read = raw_matrix_info.narrowed_read[curr_r_line]
-					# print(curr_r_read)
 					else:
 						r_reached = True
-					#while not r_reached and curr_r_line <= raw_matrix_info.narrowed_matrix.shape[0]:
-					for curr_r_line in range(sp+1,raw_matrix_info.narrowed_matrix.shape[0]):
+					# while not r_reached and curr_r_line <= raw_matrix_info.narrowed_matrix.shape[0]:
+					for curr_r_line in range(sp + 1, raw_matrix_info.narrowed_matrix.shape[0]):
 						if r_reached:
 							break
 						if curr_r_line in visited_sindex:
@@ -669,35 +690,29 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 						else:
 							visited_sindex.add(curr_r_line)
 						curr_r_read = raw_matrix_info.narrowed_read[curr_r_line]
-						if curr + 1 > int(curr_r_read[st_find.index_field]) - 1 + len(curr_r_read[st_find.read_field]) - 1 or\
-								curr + 1 < int(curr_r_read[st_find.index_field])-1:
+						if curr + 1 > int(curr_r_read[st_find.index_field]) - 1 + len(
+								curr_r_read[st_find.read_field]) - 1 or \
+								curr + 1 < int(curr_r_read[st_find.index_field]) - 1:
 
 							if curr_r_line + 1 >= raw_matrix_info.narrowed_matrix.shape[0]:
 								r_reached = True
 								break
-							#curr_r_line += 1
-							#curr_r_read = raw_matrix_info.narrowed_read[curr_r_line]
-							# if current read does not cover the curr position (gaps), break
+
 							if curr + 1 < int(curr_r_read[st_find.index_field]) - 1:
 								r_reached = True
 								break
 							# if current read does not support the current misp, break
-							if int(curr_r_read[st_find.index_field]) - 1 <= pos <= int(curr_r_read[st_find.index_field]) - 1 + len(curr_r_read[st_find.read_field])-1 and \
-									curr_r_read[st_find.read_field][pos - (int(curr_r_read[st_find.index_field]) - 1)] != changed_base:
-								# print("read not supporting misp",pos,change, curr_r_read)
-								# print(curr_r_read)
-								#curr_r_line += 1
-								#if curr_r_line + 1 >= raw_matrix_info.narrowed_matrix.shape[0]:
-								#	r_reached = True
-								#	break
-								#else:
-								#	curr_r_read = raw_matrix_info.narrowed_read[curr_r_line]
-								# r_reached= True
+							if int(curr_r_read[st_find.index_field]) - 1 <= pos <= int(
+									curr_r_read[st_find.index_field]) - 1 + len(curr_r_read[st_find.read_field]) - 1 and \
+									curr_r_read[st_find.read_field][
+										pos - (int(curr_r_read[st_find.index_field]) - 1)] != changed_base:
+
 								continue
 
 							# print(curr_r_read)
 							continue
-						if ref[curr + 1] == curr_r_read[st_find.read_field][curr + 1 - (int(curr_r_read[st_find.index_field]) - 1)]:
+						if ref[curr + 1] == curr_r_read[st_find.read_field][
+							curr + 1 - (int(curr_r_read[st_find.index_field]) - 1)]:
 							r_window += 1
 						else:
 							r_reached = True
@@ -707,83 +722,98 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 					window = l_window + r_window + 1
 					if seg not in found_segments:
 						found_segments.add(seg)
-						print("target misp", pos, read_freq.get(misP_reads[pos][changed_base][0][st_find.read_field]))
+					print("target misp", pos, read_freq.get(misP_reads[pos][changed_base][0][st_find.read_field]))
 
-						print("seg_length", len(seg))
+					print("seg_length", len(seg))
 
-					# print("ref:",ori_ref[pos-l_window:pos+r_window+1])
-
-					# print("seg:",seg)
-					# reject this read candidate
-					if len(seg) < 50 and len(misP_reads[pos][changed_base]) < 2 and read_freq.get(
-							misP_reads[pos][changed_base][0][st_find.read_field]) == 1:
-						rejected_read.extend(misP_reads[pos][changed_base])
-						# print("rejected ",misP_reads[pos][changed_base])
-						reject = True
+					'''if len(seg)<50 and read_freq.get(read[st_find.read_field]) == 1 :#and len(misP_reads[pos][changed_base])==1:
+						rejected_read.append(read)
+						#if misP_reads[pos][changed_base][0][st_find.read_field] == read[st_find.read_field]:
+						#	misP_reads[pos].pop(changed_base)
+						#	misPs[pos].remove(change)
+						rejected = True
+						if pos not in rejected_misps.keys():
+							rejected_misps.update({pos:[change]})
+						else:
+							rejected_misps.get(pos).append(change)
+						break'''
+					if len(seg) >= 50:
+						rejected = False
 						break
-					# continue
-
-					#print("\n segment size", window, "\n")
-					if len(misP_reads[pos][changed_base]) > 1:
-						total_freq = 0
-						for tr in misP_reads[pos][changed_base]:
-							total_freq += read_freq.get(tr[st_find.read_field])
-						# accepted_misps.add((pos, change, read_freq.get(misP_reads[pos][changed_base][0][3]), window))
-						accepted_misps.update({pos: (change, total_freq, window)})
+				#if not rejected:
+				if rejected:  # and len(misP_reads[pos][changed_base])==1:
+					rejected_read.append(read)
+					# if misP_reads[pos][changed_base][0][st_find.read_field] == read[st_find.read_field]:
+					#	misP_reads[pos].pop(changed_base)
+					#	misPs[pos].remove(change)
+					rejected = True
+					if pos not in rejected_misps.keys():
+						rejected_misps.update({pos: [change]})
 					else:
-						# accepted_misps.add((pos, change, read_freq.get(misP_reads[pos][changed_base][0][3]), window))
-						accepted_misps.update({pos: (change, read_freq.get(misP_reads[pos][changed_base][0][st_find.read_field]), window)})
-
-			else:
-				if len(misP_reads[pos][changed_base]) < 2 and read_freq.get(
-						misP_reads[pos][changed_base][0][st_find.read_field]) == 1:
-					rejected_read.extend(misP_reads[pos][changed_base])
-					# print("rejected ",misP_reads[pos][changed_base])
-					reject = True
+						rejected_misps.get(pos).append(change)
 					break
 				else:
-					if len(misP_reads[pos][changed_base]) > 1:
-						total_freq = 0
-						for tr in misP_reads[pos][changed_base]:
-							total_freq += read_freq.get(tr[3])
-						# accepted_misps.add((pos, change, read_freq.get(misP_reads[pos][changed_base][0][3]), window))
-						accepted_misps.update({pos: (change, total_freq, 0)})
-					else:
-						# accepted_misps.add((pos, change, read_freq.get(misP_reads[pos][changed_base][0][3]), window))
-						accepted_misps.update(
-							{pos: (change, read_freq.get(misP_reads[pos][changed_base][0][st_find.read_field]), 0)})
+					tmp_accepted_misps.update({pos: (change, read_freq[read[st_find.read_field]], window)})
 
-		if reject:
-			continue
+			else:
+				if read_freq.get(read[st_find.read_field]) == 1:# and len(misP_reads[pos][changed_base]) < 2:
+					rejected_read.append(read)
+					rejected = True
+					#if misP_reads[pos][changed_base][0][st_find.read_field] == read[st_find.read_field]:
+					#	misP_reads[pos].pop(changed_base)
+					#	misPs[pos].remove(change)
+					if pos not in rejected_misps.keys():
+						rejected_misps.update({pos: [change]})
+					else:
+						rejected_misps.get(pos).append(change)
+					break
+				else:
+					tmp_accepted_misps.update({pos: (change, read_freq[read[st_find.read_field]], 0)})
+
+		if len(tmp_accepted_misps) == len(read[st_find.misp_field]):
+			for kpos in tmp_accepted_misps.keys():
+				accepted_misps.update(tmp_accepted_misps)
+
+
 
 	if len(rejected_read) > 0:
 		print(len(rejected_read), "reads rejected")
-		#restore index pos for writing files
-		write_sam(rejected_read, "rejected_" + os.path.basename(sub_read_file), "a",True)
+
 		rejected_set = set([x[st_find.read_field] for x in rejected_read])
 
 		d_info = {}
-		# for ir,read in enumerate(subbed_read):
-		#    if "D" in read[4]:
 
+		'''if rejected read has more than 1 misp, check if all misp should be revered'''
 		for ir, read in enumerate(subbed_read):
+			start = int(read[st_find.index_field]) - 1
+			cigar = read[st_find.cigar_field]
+			if re.search('^[0-9]+S', cigar) is not None:
+				assert start != int(original_subbed_read[ir][st_find.index_field]) - 1
 			if read[st_find.read_field] in rejected_set:
 				print("revert", read)
-				start = int(read[st_find.index_field]) - 1
-				ref = ref[:start] + ori_ref[start:start + len(read[st_find.read_field])] + ref[start + len(read[st_find.read_field]):]
+
+				for tmp_misp in read[st_find.misp_field]:
+					tmp_misp_pos = list(tmp_misp.keys())[0]
+					if tmp_misp_pos not in accepted_misps:
+						#assert ref[tmp_misp_pos] != ori_ref[tmp_misp_pos]
+						ref = ref[:tmp_misp_pos] + ori_ref[tmp_misp_pos] + ref[tmp_misp_pos+1:]
+
+		write_seq(ref,"verified_"+new_strain_file)
+
+
+				#ref = ref[:start] + ori_ref[start:start + len(read[st_find.read_field])] + ref[start + len(read[st_find.read_field]):]
 			# ref[start:start+len(read[3])] = ori_ref[start:start+len(read[3])]
 
 			# print(pos,change,support_count,tmp_count)
 
 		# remove rejected reads from  subbed_reads and file
-		new_subbed_read = []
+		verified_subbed_read = []
 		for read in subbed_read:
 			if read[st_find.read_field] not in rejected_set:
-				new_subbed_read.append(read)
-		# restore index pos for writing files
-		write_sam(new_subbed_read, sub_read_file,restore_pos=True)
+				verified_subbed_read.append(read)
+
 		print(len(subbed_read), "reads originally in ", os.path.basename(sub_read_file))
-		subbed_read = new_subbed_read
+		subbed_read = verified_subbed_read
 		print(len(rejected_set), "reads reverted, removed from", os.path.basename(sub_read_file), "now ", len(subbed_read))
 		subbed_read_set = set([x[st_find.read_field] for x in subbed_read])
 		subprocess.run("rm -r batch_*",stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
@@ -791,10 +821,24 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 		#new_misp_conflict,no_fill = curr_gap_reads(ref, strain, subbed_read_set, candidate_read,
 		#						   raw_matrix_info.narrowed_matrix, read_freq,misp_conflict)
 		#misp_conflict = new_misp_conflict
+		'''after removing rejected reads, go through accepted_misp again
+			writing restored index to rejected and subbed_read file'''
+
+		if stage > 0:
+			write_sam(rejected_read, "stage_"+str(stage)+"_rejected_" + os.path.basename(sub_read_file), "w+", True)
+			write_sam(verified_subbed_read, "stage_" + str(stage) + "_verified_"+sub_read_file, restore_pos=True)
+			write_seq(ref,"stage_"+str(stage)+"_verified_"+new_strain_file)
+		write_seq(ref,new_strain_file)
+		write_sam(rejected_read, "rejected_" + os.path.basename(sub_read_file), "a+",True)
+		write_sam(subbed_read, sub_read_file, restore_pos=True)
 	# if reach_end:
 
-	'''else:
-
+	# update misp total freq
+	else:
+		print("all reads are already verified",len(rejected_read),"reads rejected")
+		if ref != unvarified_ref:
+			write_seq(ref,"error_ref_"+new_strain_file)
+		'''
 		with open("misp_" + os.path.basename(sub_read_file), "w+") as mf:
 			for misp_pos in sorted(list(accepted_misps.keys())):
 				val = accepted_misps[misp_pos]
@@ -824,14 +868,15 @@ def fac_verify_misp(ref_file, support_samfile, sub_read_file, new_strain_file, c
 		rejf.write("")
 	initial_matrix_info = bm.matrix_from_readlist(bm.read_sam(support_samfile), 0, marked_id=set({}), target="raw")
 	matrix_info = initial_matrix_info
-	verified_read, accpeted_misps = verify_misp(ref_file, matrix_info, sub_read_file, new_strain_file, candidate_sam)
-
+	#verified_read, accpeted_misps = verify_misp(ref_file, matrix_info, sub_read_file, new_strain_file, candidate_sam)
+	initial_sub_read = bm.read_sam(sub_read_file)
 	tmp_rejected = []
-
-	tmp_verified_read, tmp_accepted_misps = verify_misp(ref_file, matrix_info, sub_read_file, new_strain_file, candidate_sam)
+	stage = 1
+	tmp_verified_read, tmp_accepted_misps = verify_misp(ref_file, matrix_info, sub_read_file, new_strain_file, candidate_sam,stage)
 	misp_conflict = {}
-	verified_misp,verified_misp_source,verified_misp_read, tmp_reads = get_misp(get_ref_seq(ref_file), verified_read,
+	verified_misp,verified_misp_source,verified_misp_read, tmp_reads = get_misp(get_ref_seq(ref_file), tmp_verified_read,
 																				fix_pos=False)
+
 	for k in verified_misp.keys():
 		misp_conflict.update({k:[]})
 	strain = int(re.search('[0-9]+', os.path.basename(sub_read_file))[0])
@@ -842,19 +887,60 @@ def fac_verify_misp(ref_file, support_samfile, sub_read_file, new_strain_file, c
 			sline = line.strip().split(" ")
 			candidate_read.append(sline)
 			read_freq.update({sline[st_find.read_field]: int(sline[st_find.freq_field])})
-	candidate_read = fix_s_pos(candidate_read)
+	fixed_candidate_read = fix_s_pos(candidate_read)
+	for ir,read in enumerate(candidate_read):
+		if re.search('^[0-9]+S',read[st_find.cigar_field]) is not None:
+			if int(read[st_find.index_field]) == int(fixed_candidate_read[ir][st_find.index_field]):
+				print(read,candidate_read[ir])
+				raise "didin't fix s begin"
+	candidate_read = fixed_candidate_read
+	one_iter = True
+	if not one_iter and len(tmp_verified_read) < len(initial_sub_read):
+		verified_read = []
+		tmp_subbed_read, misp_conflict = curr_gap_reads(get_ref_seq(new_strain_file), strain, tmp_verified_read,
+														candidate_read, matrix_info.narrowed_matrix, read_freq,
+														misp_conflict, stage)
+		if readlist_comapre(tmp_subbed_read,tmp_verified_read) == 0:
+			print("no new reads found, terminate")
+			verified_read = tmp_subbed_read
 
-
-	while len(verified_read) != len(tmp_verified_read):
+	else:
 		verified_read = tmp_verified_read
-		accpeted_misps = tmp_accepted_misps
 
-		tmp_subbed_read,misp_conflict = curr_gap_reads(get_ref_seq(new_strain_file),strain,verified_read,candidate_read,matrix,read_freq,misp_conflict)
+	#keep a global visited read set?
+	while not one_iter and len(verified_read) != len(tmp_verified_read):
+		verified_read = tmp_verified_read
+		accepted_misps = tmp_accepted_misps
+
+		stage += 1
+
 		tmp_verified_read, tmp_accepted_misps = verify_misp(ref_file, matrix_info, sub_read_file, new_strain_file,
-															candidate_sam)
+															candidate_sam,stage)
+
+		test_tmp_verified_read = bm.read_sam(sub_read_file)
+		readlist_comapre(tmp_verified_read,verified_read)
+		if  len(tmp_verified_read) != len(test_tmp_verified_read):
+
+			readlist_comapre(tmp_verified_read,test_tmp_verified_read)
+			raise "verify_misp introduce new reads or remove reads or write reads error"
+		curr_verified_read = copy.deepcopy(tmp_verified_read)
+		tmp_subbed_read,misp_conflict = curr_gap_reads(get_ref_seq(new_strain_file), strain, curr_verified_read,
+													   candidate_read, matrix_info.narrowed_matrix, read_freq,
+													   misp_conflict, stage)
+
+		if readlist_comapre(tmp_subbed_read,tmp_verified_read) == 0:
+			print("no new found reads, finish verification")
+			break
+		if len(tmp_subbed_read) < len(tmp_verified_read):
+			raise "curr_gap_reads removes verirified reads"
+		other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_"+str(strain)+"_reference.fa"
+		other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+		subprocess.run("cp combine_final_strain_"+str(strain)+"_reference.fa_extract.sam stage_"+str(stage)+"_combine_final_strain_"+str(strain)+"_reference.fa_extract.sam",stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+
 
 
 	#write misp
+	verified_read = tmp_verified_read
 	accepted_misps = tmp_accepted_misps
 	with open("misp_" + os.path.basename(sub_read_file), "w+") as mf:
 		for misp_pos in sorted(list(accepted_misps.keys())):
@@ -864,27 +950,33 @@ def fac_verify_misp(ref_file, support_samfile, sub_read_file, new_strain_file, c
 			mf.write(str(misp_pos + 1) + " & " + str(bases[0]) + " & " + bases[1] + "&" + str(val[1]) + " & " + str(
 				val[2]) + "\\\\\n\hline\n")
 
-	'''while (len(tmp_rejected) != len(rejected_reads)):
-	
-		tmp_rejected = copy.deepcopy(rejected_reads)
 
-		rejected_reads,misp_conflict, no_candidate = verify_misp(ref_file, support_samfile, sub_read_file, new_strain_file, candidate_sam, misp_conflict)
+def readlist_comapre(readlist1,readlist2):
+	"""
 
-		verify_sub_command = "for f in {56..64}; do\n" + \
-							 os.path.dirname(__file__) + "/find_sub.sh" + " " + "-r" + " " + "final_strain_" + str(
-			strain) + "_reference.fa" + " " + "-1" + " " + "half_real_R1.fastq" + " " + "-2" + " " + "half_real_R2.fastq" + \
-							 " " + "-m" + " " + "tog" + " " + "-a" + " " + "bowtie2" + " " + "-c" + " " + 'True' + " -d Y;" + \
-							 "cat " + os.path.dirname(
-			__file__) + "/ mullti_support /${f}_out / round_1_extract.sam >> strain" + str(
-			strain) + "_combine_extract.sam\ndone"
+	:param readlist1:
+	:param readlist2:
+	:return: count of total unique reads
+	"""
 
-		verify_proc = subprocess.run(verify_sub_command,
-									 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
-									 shell=True)'''
+	print(len(readlist1), len(readlist2))
+	r1_set = set([x[3] for x in readlist1])
+	#r1_set = set([x[3].replace("-","") for x in readlist1])
+	r2_set = set([x[3] for x in readlist2])
+	#r2_set = set([x[3].replace("-","") for x in readlist2])
+	print("readlist1 unique")
+	count = 0
+	for read in readlist1:
+		if read[3] not in r2_set:
+			print(read)
+			count +=1
+	print("readlist2 unique")
+	for read in readlist2:
+		if read[3] not in r1_set:
+			print(read)
+			count += 1
+	return count
 
-#    print(rejected_reads)
-# if rejected_reads is int:
-#    break
 def get_ref_seq(ref_file):
 	ref  =""
 	with open(ref_file,"r") as rf:
@@ -894,13 +986,14 @@ def get_ref_seq(ref_file):
 	return ref
 
 
-def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_freq,misp_conflict):
+def curr_gap_reads(ref, strain, subbed_read, candidate_read, matrix, read_freq, misp_conflict, stage):
 	"""
 	Fill more candidate reads after rejecting reads
+	:param stage:
 	:param ref: reference sequence
 	:param strain: strain number
-	:param subbed_read_set: set of remained subbed reads
-	:param candidate_read:
+	:param subbed_read: set of remained subbed reads
+	:param candidate_read: fixed position
 	:param matrix: matrix of other SRR samples
 	:param read_freq: frequency of each read
 	:param misp_conflict: misp that causes gaps when placed together, format {pos:{pos_misp:[changed_base]}}
@@ -921,25 +1014,37 @@ def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_f
 			for line in rejf:
 				fields = line.strip().split(" ")
 				prev_readset.add(fields[st_find.read_field])
-	with open("subbed_reads_" + str(strain) + ".sam", "r") as subf:
-		for line in subf:
-			fields = line.strip().split(" ")
-			start = int(fields[st_find.index_field]) - 1
-			for ib, base in enumerate(fields[st_find.read_field]):
-				covered_pos.update({start + ib: base})
 
 	print(len(prev_readset))
 
 	readlist = candidate_read
 
-	subbed_read = []
+	file_subbed_read = bm.read_sam("subbed_reads_" + str(strain) + ".sam")
+	fixed_subbed_read = fix_s_pos(file_subbed_read)
+	file_subbed_read = fixed_subbed_read
+	assert readlist_comapre(file_subbed_read,subbed_read)== 0
+	for isr,sread in enumerate(file_subbed_read):
+		if int(sread[st_find.index_field]) != int(subbed_read[isr][st_find.index_field]):
+			print(sread, subbed_read[isr])
+			raise "index error in file_subbed_read"
+		start  = int(sread[st_find.index_field])-1
+		for ib, base in enumerate(sread[st_find.read_field]):
+			covered_pos.update({start + ib: base})
 	#misPs = []
-	for ir, read in enumerate(readlist):
-		if read[st_find.read_field] in subbed_read_set:
-			subbed_read.append(read)
+	subbed_read_set = set([x[st_find.read_field] for x in subbed_read])
+	new_subbed_read = copy.deepcopy(subbed_read)
+	subbed_read = new_subbed_read
+	#for ir, read in enumerate(readlist):
+		#if read[st_find.read_field] in subbed_read_set:
+			#subbed_read.append(read)
 			#misPs.extend(read[st_find.misp_field])
 	original_readlist = copy.deepcopy(readlist)
-	misPs, misP_source, misP_reads, new_readlist = get_misp(ref, readlist, False)
+	misPs, misP_source, misP_reads, new_readlist = get_misp(ref, readlist, fix_pos=False)
+	for tmp_read in new_readlist:
+		if len(tmp_read[st_find.misp_field]) > 70 :
+			print(tmp_read)
+			raise "position error"
+
 	readlist = new_readlist
 
 	count = 0
@@ -948,6 +1053,8 @@ def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_f
 		count += 1
 		if read[st_find.read_field] in prev_readset:
 			# batch += 1
+			continue
+		if read[st_find.read_field] in subbed_read_set:
 			continue
 		read_index = int(read[st_find.index_field]) - 1
 		#read_misPs = [list(x.items())[0][0] for x in read[st_find.misp_field]]
@@ -959,9 +1066,11 @@ def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_f
 
 		temp_ref = ref[:read_index] + read[st_find.read_field] + ref[read_index + len(read[st_find.read_field]):]
 		# print(editdistance.eval(temp_ref,ref))
+
 		gap_list = verify_seq_support(temp_ref,batch,readfile1,readfile2)
 		if len(gap_list) == 0:
-			subbed_read.append(read)
+			subbed_read.append(candidate_read[batch])
+			subbed_read_set.add(read[st_find.read_field])
 			read_start = int(read[2]) - 1
 			for ind, base in enumerate(read[st_find.read_field]):
 
@@ -990,18 +1099,10 @@ def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_f
 
 	# print(subbed_read,len(readlist))
 	# batch += 1
-
-	with open("final_strain_" + str(strain) + "_reference.fa", "w+") as bf:
-		bf.write(">final_strain_" + str(strain) + "\n")
-		bf.write(ref)
-	with open("subbed_reads_" + str(strain) + ".sam", "w+") as bf:
-		for line in subbed_read:
-			bf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-	# subprocess.run("rm -r batch_*",shell=True)
-
-	with open("fixed_strain_" + str(strain) + "_spike.fa", "w+") as sf:
-		sf.write(">fixed_strain_" + str(strain) + "_spike" + "\n")
-		sf.write(ref[21562:25383])
+	if len(subbed_read) > len(file_subbed_read):
+		write_result(strain, ref, subbed_read, stage, restore_pos=True,curr=True)
+	else:
+		print("no more reads can fit")
 	strain += 1
 	# remove temp files
 	verify_sub_command = "rm" + " " + "-r" + " " + "./batch_*"
@@ -1009,10 +1110,27 @@ def curr_gap_reads(ref, strain, subbed_read_set, candidate_read,  matrix, read_f
 	verify_proc = subprocess.run(verify_sub_command,
 								 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
 								 shell=True)
-	return misp_conflict
+	return subbed_read,misp_conflict
 
-
-
+def write_misp(accepted_misps,filename):
+	with open(filename, "w+") as mf:
+		for misp_pos in sorted(list(accepted_misps.keys())):
+			val = accepted_misps[misp_pos]
+			bases = val[0].split("|")
+			print(str(misp_pos + 1), "&", bases[0], "&", bases[1], "&", val[1], "&", val[2], "\\\\\n\hline")
+			mf.write(str(misp_pos + 1) + " & " + str(bases[0]) + " & " + bases[1] + "&" + str(val[1]) + " & " + str(
+				val[2]) + "\\\\\n\hline\n")
+def write_seq(ref,filename):
+	match = re.match('strain_([0-9]+)',filename)
+	strain = ""
+	if  match is not None:
+		strain = match.group(1)
+	with open(filename,"w+") as wf:
+		wf.write(">strain_"+strain+"_reference\n")
+		wf.write(ref)
+	with open("spike_"+filename,"w+") as swf:
+		swf.write(">strain_"+strain+"_spike\n")
+		swf.write(ref[21562:25384])
 def write_sam(readlist, filename, mode="w+",restore_pos=False):
 	if restore_pos:
 		readlist = fix_s_pos(readlist,restore=True)
@@ -1052,14 +1170,15 @@ def misp_syno(ref_file,sub_file,misp_file,code_file):
 	27394..27759
 	27756..27887
 	27894..28259
-	28274..29533
-	29558..29674'''
+	28274..29533'''
 	endpoints_list = endpoints.split("\n")
 	protein_loc = []#(265,21555)
 	for se in endpoints_list:
 		start = se.split("..")[0]
 		end = se.split("..")[1]
 		protein_loc.append(range(int(start)-1,int(end)-1))
+	region_list = ["ORF1ab","S","NS3","E","M","NS6","NS7a","NS7b","NS8","N"]
+	assert len(protein_loc) == len(region_list),str(len(protein_loc))+" "+str(protein_loc)
 	translate = {}
 	ref = ""
 	spike_range = range(21562,25383)
@@ -1079,15 +1198,15 @@ def misp_syno(ref_file,sub_file,misp_file,code_file):
 	misP,misp_source,misp_reads,subbed_read = get_misp(ref, subbed_read, False)
 	syn_stat = {}
 	move = []
-	for pos,clist in misP.items():
+	for pos,clist in sorted([ (k,v) for k,v in misP.items()],key=lambda x:x[0]):
 		found = False
-		for r in protein_loc:
+		for pi,r in enumerate(protein_loc):
 			#move bases inside this protein region only
 
 			if pos in r:
+				print("region:",region_list[pi])
 				found = True
 				for change in clist:
-					#location = int((pos-r.start)/3)
 					index = (pos - r.start) % 3
 					changed_base = change.split("|")[1]
 
@@ -1100,24 +1219,31 @@ def misp_syno(ref_file,sub_file,misp_file,code_file):
 							if misp_reads[pos][changed_base][0][st_find.read_field] == read[st_find.read_field]:
 								tmp_read = read
 						assert len(tmp_read) != 0
+						#print(tmp_read)
 						#print([list(x.items()) for x in tmp_read[st_find.misp_field]])
 						tmp_misP_set = set([list(x.items())[0][0] for x in tmp_read[st_find.misp_field]])
 						read_index = int(tmp_read[2])-1
 						# mut_codon = ref_codon[0:index] + sorted_mutated_read[smr_index][read_field][mp-smr_read_index] + ref_codon[index + 1:]
+						test_ref_codon = ""
 						for read_misp in tmp_read[st_find.misp_field]:
 							mp = list(read_misp.items())[0][0]
 
 							if mp != pos:
 								#print(mp,pos)
 								continue
+
 							for i in range(mp - index, mp + (3 - index)):
+								#print(i)
 								#print(tmp_read[st_find.read_field][i - read_index])
 								# if the adjacent spots are also misPs, will use the read's adjecent spot instead of ref
 								if i in tmp_misP_set and 0 <= i - read_index < len(tmp_read[st_find.read_field]):
 									mut_codon += tmp_read[st_find.read_field][i - read_index]
+									test_ref_codon+=ref[i]
 								else:
 									mut_codon += ref[i]
-					assert len(mut_codon) ==3
+									test_ref_codon += ref[i]
+						assert len(mut_codon) ==3
+						assert ref_codon == test_ref_codon,ref_codon+" "+test_ref_codon
 					#print(ref_codon,mut_codon,index, ref[pos-index],change,ref[pos+(3-index)-1], translate[ref_codon],translate[mut_codon])
 
 					del_move = len([x for x in move if x < pos])
@@ -1128,7 +1254,7 @@ def misp_syno(ref_file,sub_file,misp_file,code_file):
 					else:
 						print("non-synonymous",pos+1,change)
 
-					syn_stat.update({pos: "non-synonymous"})
+						syn_stat.update({pos: "non-synonymous"})
 		if not found:
 			syn_stat.update({pos:"synonymous"})
 
@@ -1137,7 +1263,7 @@ def misp_syno(ref_file,sub_file,misp_file,code_file):
 			m = re.search('^([0-9]+)',line)
 			if m is None:
 				continue
-			index = int(m.group(1))
+			index = int(m.group(1)) -1
 			new_line = line.replace('\\\\',' & '+syn_stat[index]+'\\\\')
 			new_line = new_line.replace(str(index),str(index+1))
 			print(new_line,end="")
@@ -1160,15 +1286,15 @@ if __name__ == "__main__":
 
 	strain_max = int(sys.argv[5])
 	for strain in range(0,strain_max+1):
-		#identify_strain(sys.argv[1], strain, sys.argv[2], sys.argv[3], sys.argv[4])
-		#subprocess.run("rm -r batch_*",stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
-		#other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_"+str(strain)+"_reference.fa"
-		#other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+		identify_strain(sys.argv[1], strain, sys.argv[2], sys.argv[3], sys.argv[4])
 
-
+		subprocess.run("rm -r batch_*",stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
 		backup_command = "cp subbed_reads_"+str(strain)+".sam subbed_reads_"+str(strain)+".sam.original; cp final_strain_"+str(strain) \
 			+ "_reference.fa final_strain_"+str(strain)+"_reference.fa.original"
 		#backup_proc = subprocess.run(backup_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,shell=True)
+
+		other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_"+str(strain)+"_reference.fa"
+		other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
 
 		fac_verify_misp(sys.argv[1], "combine_final_strain_" + str(strain) + "_reference.fa_extract.sam",
 						"subbed_reads_" + str(strain) + ".sam", "final_strain_" + str(strain) + "_reference.fa",

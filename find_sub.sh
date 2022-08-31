@@ -130,7 +130,12 @@ function  alignment {
                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -f -1 "$read1" -2 "$read2" --local > gene.sam
                 else
                     echo "bowtie2 alignment"
-                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local > gene.sam
+                    if [ ! $check_gap ];then
+                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local --score-min G,10,4 > gene.sam
+                    else
+                        echo "check_gap" $check_gap
+                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local --score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50 > gene.sam
+                    fi
                 fi
             elif [ "$aligner" == "minimap2" ]; then
                 echo "minimap2 alignment"
@@ -341,7 +346,12 @@ a="--gene_L=${fL}";
 b="--read_L=${rL}";
 #ref=$(<../${1})
 #echo $ref
-match_limit=0.7 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
+if [ ! "$check_gap" ]; then
+    match_limit=0.95
+else
+    match_limit=0.7 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
+    echo "check_gap match_limit $match_limit"
+fi
 echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap} --output_dir=${out_dir}";
 
 

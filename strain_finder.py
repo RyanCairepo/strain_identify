@@ -25,6 +25,7 @@ read_field = 3
 cigar_field = 4
 freq_field = 5
 misp_field = 6
+gene_length = 29891
 '''
 positions for each protein region
 '''
@@ -257,6 +258,10 @@ if __name__ == "__main__":
 
 
 		with open("mutated_read_freq.txt","w+") as mrfreq:
+			for k,v in sorted(mutated_read_freq.items(),key= lambda x:x[1]):
+				if v > 0:
+					mrfreq.write(k+": "+str(v)+"\n")
+		with open(out_dir+"mutated_read_freq.txt","w+") as mrfreq:
 			for k,v in sorted(mutated_read_freq.items(),key= lambda x:x[1]):
 				if v > 0:
 					mrfreq.write(k+": "+str(v)+"\n")

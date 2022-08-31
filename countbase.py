@@ -3081,25 +3081,33 @@ def read_compare(file1,file2):
 		for line in f1:
 			fields = line.strip().split(" ")
 			readlist1.append(fields)
-			readset1.add(fields[3])
+			readset1.add(fields[3].replace("-",""))
 	with open(file2,"r") as f2:
 		for line in f2:
 			fields = line.strip().split(" ")
 			readlist2.append(fields)
-			readset2.add(fields[3])
-
+			readset2.add(fields[3].replace("-",""))
+	if len(readlist1) != len(readlist2):
+		print("sam files not equal")
+	count1 = 0
 	for read in readlist1:
 		start = int(read[2])
 		end = int(read[2])+len(read[3])
-		if read[3] not in readset2 and (start in range(21563,25384) or end in range(21563,25384)) :
+		if read[3].replace("-","") not in readset2:# and (start in range(21563,25384) or end in range(21563,25384)) :
 			print(read)
+			count1 += 1
+
+	count = 0
 	#exit()
 	print("read set 2 ")
 	for read in readlist2:
 		start = int(read[2])
 		end = int(read[2]) + len(read[3])
-		if read[3] not in readset1 and (start in range(21563,25384) or end in range(21563,25384)):# and "N" not in read[3]:
+		if read[3].replace("-","") not in readset1:# and (start in range(21563,25384) or end in range(21563,25384)):# and "N" not in read[3]:
 			print(read)
+			count += 1
+	print(count1,"reads unique read list 1")
+	print(count,"reads unqiue read list 2")
 	print(len(readset2.intersection(readset1)), "reads shared")
 def test_stop_con(ref_file,samfile):
 	endpoints = '''266..21555
@@ -3222,6 +3230,44 @@ def fix_sub_pos(subfile):
 		write_sam(readlist,subfile)
 	return readlist
 
+
+def prot_compare(file1,file2):
+	seq1 = ""
+	seq2 = ""
+	with open(file1, "r") as rf:
+		for line in rf:
+			if line[0] != ">":
+				line = line.strip()
+				seq1 += line
+	with open(file2, "r") as rf:
+		for line in rf:
+			if line[0] != ">":
+				line = line.strip()
+				seq2 += line
+	if len(seq2) == 3821:
+		seq2 += "A"
+	assert len(seq1) == len(seq2), str(len(seq1))+" "+str(len(seq2))
+	for i, base in enumerate(seq1):
+		if base != seq2[i]:
+			print(base, i + 1, seq2[i])
+
+def narrow_SRR(filelist):
+	"""
+
+	:param filelist: extract.sam of other SRRs,
+	:return:
+	"""
+
+	for file in filelist:
+		file_num = re.search('([0-9]+)_out',file).group(1)
+		readlist = bm.read_sam(file)
+		print(file_num,"../../multi_support/"+file_num+"_filtered_R1.fastq")
+		narrow_proc = subprocess.run("ls -l "+"../../multi_support/"+file_num+"_filtered_*.fastq",stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+		print(narrow_proc.stdout)
+		continue
+		matrix_info = bm.matrix_from_readlist(readlist,0.5,set({}),True)
+		narrowed_readlist = matrix_info.narrowed_read
+
 if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser(description="some tool functions", usage='%(prog)s [options]' + str(sys.argv))
@@ -3262,34 +3308,15 @@ if __name__ == "__main__":
 	parser.add_argument("--read_compare",type=str,default="no")
 	parser.add_argument("--test_stop_con",type=str,default="no")
 	parser.add_argument("--fix_sub_pos",type=str,default="no")
+	parser.add_argument("--prot_compare", type=str,default="no")
+	parser.add_argument("--narrow_SRR",type=str,default="no")
 	args = parser.parse_args()
 
 	input_files = args.files
 	print(input_files[1:])
-	# hash_str()
-	# count_match()
-	# countdiff()
-	# count_record()
-	# oneline_fasta()
+
 	if args.overlap_id != "no":
 		getoverlap(input_files[1], input_files[2])
-	# get_sam_dup()
-
-	# adjustindex(377)
-	# sep_reads()
-
-	# seq_depth()
-
-	# extract_to_read()
-	# seq_depth()
-	# hash_str()
-	# count_length()
-	# missing_narrow()
-
-	# check_order()
-	# fix_ID()
-
-	# get_contigs()
 	if args.rev_comp != "no":
 		get_rev_comp(input_files[1], True)
 	if args.get_read_by_id != "no":
@@ -3359,6 +3386,10 @@ if __name__ == "__main__":
 		test_stop_con(input_files[1],input_files[2])
 	if args.fix_sub_pos != "no":
 		fix_sub_pos(input_files[1])
+	if args.prot_compare != "no":
+		prot_compare(input_files[1],input_files[2])
+	if args.narrow_SRR != "no":
+		narrow_SRR(input_files[1:])
 	corenum = mp.cpu_count() - 2
 	line_amount = 245216120
 
