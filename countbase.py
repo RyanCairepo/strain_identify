@@ -1502,14 +1502,26 @@ def calc_coverage(ref_file, sam_file):
 	return cvg_list, rn_cvg_list
 
 
-def get_coverage(ref_file, sam_file):
-	cvg_list, rn_cvg_list = calc_coverage(ref_file, sam_file)
-	with open("cvg.txt", "w+") as ncf, open("rn_cvg.txt", "w+") as rncf:
-		for i, v in enumerate(cvg_list):
+def get_coverage(ref_file1, sam_file1,ref_file2, sam_file2,ref_file3, sam_file3):
+	ref1_cvg_list, ref1_rn_cvg_list = calc_coverage(ref_file1, sam_file1)
+	with open(os.path.basename(ref_file1)+"cvg.txt", "w+") as ncf, open(os.path.basename(ref_file1)+"rn_cvg.txt", "w+") as rncf:
+		for i, v in enumerate(ref1_cvg_list):
 			ncf.write(str(i + 1) + ": " + str(v) + ", ")
-		for i1, v1 in enumerate(rn_cvg_list):
+		for i1, v1 in enumerate(ref1_rn_cvg_list):
 			rncf.write(str(i1 + 1) + ": " + str(v1) + ", ")
-# draw_coverage(["cvg.txt"])
+	ref2_cvg_list, ref2_rn_cvg_list = calc_coverage(ref_file2, sam_file2)
+	with open(os.path.basename(ref_file2)+"cvg.txt", "w+") as ncf, open(os.path.basename(ref_file2)+"rn_cvg.txt", "w+") as rncf:
+		for i, v in enumerate(ref2_cvg_list):
+			ncf.write(str(i + 1) + ": " + str(v) + ", ")
+		for i1, v1 in enumerate(ref2_rn_cvg_list):
+			rncf.write(str(i1 + 1) + ": " + str(v1) + ", ")
+	ref3_cvg_list, ref3_rn_cvg_list = calc_coverage(ref_file3, sam_file3)
+	with open(os.path.basename(ref_file3)+"cvg.txt", "w+") as ncf, open(os.path.basename(ref_file3)+"rn_cvg.txt", "w+") as rncf:
+		for i, v in enumerate(ref3_cvg_list):
+			ncf.write(str(i + 1) + ": " + str(v) + ", ")
+		for i1, v1 in enumerate(ref3_rn_cvg_list):
+			rncf.write(str(i1 + 1) + ": " + str(v1) + ", ")
+	draw_coverage([os.path.basename(ref_file1)+"rn_cvg.txt",os.path.basename(ref_file2)+"rn_cvg.txt",os.path.basename(ref_file3)+"rn_cvg.txt"])
 
 
 def draw_coverage(files):
@@ -3109,6 +3121,8 @@ def read_compare(file1,file2):
 	print(count1,"reads unique read list 1")
 	print(count,"reads unqiue read list 2")
 	print(len(readset2.intersection(readset1)), "reads shared")
+
+
 def test_stop_con(ref_file,samfile):
 	endpoints = '''266..21555
 		21563..25384
@@ -3268,6 +3282,19 @@ def narrow_SRR(filelist):
 		matrix_info = bm.matrix_from_readlist(readlist,0.5,set({}),True)
 		narrowed_readlist = matrix_info.narrowed_read
 
+def ref_from_sub(reffile,subfile):
+	ref = identify_verify.get_ref_seq(reffile)
+	sub_read = bm.read_sam(subfile)
+	sub_read = identify_verify.fix_s_pos(sub_read)
+	for read in sub_read:
+		start = int(read[2])-1
+		for i,base in enumerate(read[3]):
+			if ref[start+i] != base:
+				ref = ref[:start+i]+ base + ref[start+i+1:]
+	identify_verify.write_seq(ref,"result_seq.fa")
+
+
+
 if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser(description="some tool functions", usage='%(prog)s [options]' + str(sys.argv))
@@ -3310,6 +3337,7 @@ if __name__ == "__main__":
 	parser.add_argument("--fix_sub_pos",type=str,default="no")
 	parser.add_argument("--prot_compare", type=str,default="no")
 	parser.add_argument("--narrow_SRR",type=str,default="no")
+	parser.add_argument("--ref_from_sub",type=str,default="no")
 	args = parser.parse_args()
 
 	input_files = args.files
@@ -3337,7 +3365,7 @@ if __name__ == "__main__":
 	if args.count_fq_freq != "no":
 		count_fq_freq(input_files[1])
 	if args.get_coverage != "no":
-		get_coverage(input_files[1], input_files[2])
+		get_coverage(input_files[1], input_files[2],input_files[3],input_files[4],input_files[5],input_files[6])
 	if args.draw_coverage != "no":
 		draw_coverage(input_files[1:])
 	if args.diff_coverage != "no":
@@ -3390,6 +3418,8 @@ if __name__ == "__main__":
 		prot_compare(input_files[1],input_files[2])
 	if args.narrow_SRR != "no":
 		narrow_SRR(input_files[1:])
+	if args.ref_from_sub != "no":
+		ref_from_sub(input_files[1],input_files)
 	corenum = mp.cpu_count() - 2
 	line_amount = 245216120
 

@@ -216,7 +216,7 @@ class TestSubmit(unittest.TestCase):
 
         misP, misP_source, misP_reads, new_readlist = identify_verify.get_misp(ref, sub_read)
         ver_read, ver_misp = identify_verify.verify_misp(filelist[0],support_matrix_info,filelist[1],filelist[3],filelist[4],stage=2)
-
+        assert identify_verify.readlist_comapre(sub_read,ver_read) == 0
     def test_misp_seq(self):
         ref = identify_verify.get_ref_seq(filelist[0])
         sub_read = bm.read_sam(filelist[1])

@@ -558,18 +558,21 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 	accepted_misps = {}
 	rejected_misps = {}
 	for ir,read in enumerate(subbed_read):
-		if read_freq[read[st_find.read_field]] > 1:
-			rejected = False
-		else:
-			rejected = True
+		#if read_freq[read[st_find.read_field]] > 1:
+		#	rejected = False
+		#else:
+		#	rejected = True
+		rejected = False
 		tmp_accepted_misps = {}
 		for misp in read[st_find.misp_field]:
 			pos = list(misp.keys())[0]
 			change = misp[pos][0]
-			if pos in accepted_misps :
+			if pos in accepted_misps.keys() :
+				print(pos,accepted_misps[pos],"already accpted,continue")
 				continue
 			if pos in rejected_misps.keys():
 				if read_freq[read[st_find.read_field]] == 1 and change in set(rejected_misps[pos]):
+					rejected_read.append(read)
 					print(read,pos,change,"already rejected, continue",rejected_misps[pos])
 					continue
 			if pos > matrix.shape[1]:
@@ -675,7 +678,7 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 
 						curr += 1
 					curr_r_line = sp + 1
-					if curr_r_line <= raw_matrix_info.narrowed_matrix.shape[0] and \
+					if curr_r_line < raw_matrix_info.narrowed_matrix.shape[0] and \
 							raw_matrix_info.narrowed_read[curr_r_line][st_find.index_field] - 1 <= curr + 1:
 
 						curr_r_read = raw_matrix_info.narrowed_read[curr_r_line]
@@ -737,8 +740,8 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 						else:
 							rejected_misps.get(pos).append(change)
 						break'''
-					if len(seg) >= 50:
-						rejected = False
+					if window < 50 and read_freq[read[st_find.read_field]]==1:
+						rejected = True
 						break
 				#if not rejected:
 				if rejected:  # and len(misP_reads[pos][changed_base])==1:
@@ -769,10 +772,12 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 					break
 				else:
 					tmp_accepted_misps.update({pos: (change, read_freq[read[st_find.read_field]], 0)})
-
+		print("accept?",read,tmp_accepted_misps,len(tmp_accepted_misps),len(read[st_find.misp_field]))
 		if len(tmp_accepted_misps) == len(read[st_find.misp_field]):
+
 			for kpos in tmp_accepted_misps.keys():
-				accepted_misps.update(tmp_accepted_misps)
+				if kpos not in accepted_misps:
+					accepted_misps.update({kpos:tmp_accepted_misps[kpos]})
 
 
 
@@ -790,7 +795,7 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 			if re.search('^[0-9]+S', cigar) is not None:
 				assert start != int(original_subbed_read[ir][st_find.index_field]) - 1
 			if read[st_find.read_field] in rejected_set:
-				print("revert", read)
+				#print("revert", read)
 
 				for tmp_misp in read[st_find.misp_field]:
 					tmp_misp_pos = list(tmp_misp.keys())[0]
@@ -896,6 +901,8 @@ def fac_verify_misp(ref_file, support_samfile, sub_read_file, new_strain_file, c
 	candidate_read = fixed_candidate_read
 	one_iter = True
 	if not one_iter and len(tmp_verified_read) < len(initial_sub_read):
+		print("run curr_gap_read")
+		exit()
 		verified_read = []
 		tmp_subbed_read, misp_conflict = curr_gap_reads(get_ref_seq(new_strain_file), strain, tmp_verified_read,
 														candidate_read, matrix_info.narrowed_matrix, read_freq,
@@ -909,6 +916,8 @@ def fac_verify_misp(ref_file, support_samfile, sub_read_file, new_strain_file, c
 
 	#keep a global visited read set?
 	while not one_iter and len(verified_read) != len(tmp_verified_read):
+		print("iterateive curr gap read")
+		break
 		verified_read = tmp_verified_read
 		accepted_misps = tmp_accepted_misps
 
@@ -1286,7 +1295,7 @@ if __name__ == "__main__":
 
 	strain_max = int(sys.argv[5])
 	for strain in range(0,strain_max+1):
-		identify_strain(sys.argv[1], strain, sys.argv[2], sys.argv[3], sys.argv[4])
+		#identify_strain(sys.argv[1], strain, sys.argv[2], sys.argv[3], sys.argv[4])
 
 		subprocess.run("rm -r batch_*",stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,shell=True)
 		backup_command = "cp subbed_reads_"+str(strain)+".sam subbed_reads_"+str(strain)+".sam.original; cp final_strain_"+str(strain) \
@@ -1294,7 +1303,7 @@ if __name__ == "__main__":
 		#backup_proc = subprocess.run(backup_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,shell=True)
 
 		other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_"+str(strain)+"_reference.fa"
-		other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
+		#other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
 
 		fac_verify_misp(sys.argv[1], "combine_final_strain_" + str(strain) + "_reference.fa_extract.sam",
 						"subbed_reads_" + str(strain) + ".sam", "final_strain_" + str(strain) + "_reference.fa",

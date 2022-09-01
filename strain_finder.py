@@ -340,7 +340,7 @@ if __name__ == "__main__":
 									else:
 										mut_codon += ref[i]
 
-								if mut_codon == "TAA":
+								if mut_codon == "TAA" or mut_codon == "TGA" or mut_codon == "TAG":
 									print("stop codon produced by",sorted_mutated_read[smr_index], tmp_misP)
 									stop_con = True
 									break
