@@ -82,8 +82,10 @@ def get_arguments():
 	parser.add_argument("--bubble_mode", type=str, default="False")
 	parser.add_argument("--brute_force", type=str,default="True")
 	parser.add_argument("--misp_mode", type=str, default="False")
-	parser.add_argument("--check_gap", type=str,default="False")
+	parser.add_argument("--check_gap", type=str,default="false")
 	parser.add_argument("--output_dir", type=str,default="")
+	parser.add_argument("--region_break",type=str,default="")
+	parser.add_argument("--gap_threshold",type=int,default=1)
 	return parser.parse_args()
 
 
@@ -216,15 +218,15 @@ if __name__ == "__main__":
 	gaps = []
 	cols =[]
 
-	for column in range(13,intermit_matrix_info.real_narrowed_matrix.shape[1]):
+	for column in range(100,intermit_matrix_info.real_narrowed_matrix.shape[1]):
 		tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(column).toarray())
 		tmp_count = np.bincount(tmp)[1:]
 		cols.append(column)
-		if sum(tmp_count) == 0:
+		if sum(tmp_count) < args.gap_threshold:
 			gaps.append(column)
 	print("cols for checking gaps",min(cols),max(cols))
 	if len(gaps) > 0:
-		if args.check_gap != "False" :
+		if args.check_gap != "false":
 			print("only checking gaps")
 			with open("gaps.txt","w+") as gapf:
 				for gap_col in gaps:
@@ -242,13 +244,13 @@ if __name__ == "__main__":
 		#exit()
 	#exit() if find_sub != "no"
 
-	if args.check_gap != 'False':
+	if args.check_gap != "false":
 		print("only checking gaps")
 		exit()
 
 	if args.brute_force == "True":
 		print("brute_force mode")
-		spike_range = range(13,29883)
+		gap_range = range(100, 28000)
 		print(len(potential_mutated),"reads not fully matched")
 
 
@@ -270,94 +272,101 @@ if __name__ == "__main__":
 
 		misPs,misP_source,misP_reads,sorted_mutated_read = identify_verify.get_misp(ref, sorted_mutated_read)
 		#print({k:v for k,v in mutated_read_freq.items() if v > 1 })
-		#print(sorted_mutated_read)
+		print(sorted_mutated_read)
 		smr_index = 0
 		misP =[]
 		added_read = set({})
 		reduced_sorted_mutated_read = []
+		if args.region_break != "":
+			endpoints_list = []
+			with open(args.region_break,"r") as ppf:
+				for line in ppf:
+					fields = line.split(":")
+					endpoints_list.append(fields[1].strip())
 
-		endpoints = '''266..21555
-		21563..25384
-		25393..26220
-		26245..26472
-		26523..27191
-		27202..27387
-		27394..27759
-		27756..27887
-		27894..28259
-		28274..29533
-		29558..29674'''
-		endpoints_list = endpoints.split("\n")
-		protein_loc = []  # (265,21555)
-		for se in endpoints_list:
-			start = se.split("..")[0]
-			end = se.split("..")[1]
-			protein_loc.append(range(int(start) - 1, int(end) - 1))
+			'''endpoints = 266..21555
+			21563..25384
+			25393..26220
+			26245..26472
+			26523..27191
+			27202..27387
+			27394..27759
+			27756..27887
+			27894..28259
+			28274..29533
+			29558..29674'''
+			#endpoints_list = endpoints.split("\n")
+			protein_loc = []  # (265,21555)
+			for se in endpoints_list:
+				start = se.split("..")[0]
+				end = se.split("..")[1]
+				protein_loc.append(range(int(start) - 1, int(end) - 1))
 
-		for smr_index in range(len(sorted_mutated_read)):
-			if sorted_mutated_read[smr_index][read_field] in added_read:
+			for smr_index in range(len(sorted_mutated_read)):
+				if sorted_mutated_read[smr_index][read_field] in added_read:
 
-				continue
-			else:
-				added_read.add(sorted_mutated_read[smr_index][read_field])
-			#print(smr_index,sorted_mutated_read[smr_index])
-			tmp_misP = []
-			smr_read_index = sorted_mutated_read[smr_index][index_field]-1
-			insertion = False
-			if "I" not in sorted_mutated_read[smr_index][cigar_field]:
-				#get misp list for this read
-				tmp_misP = [list(x.items())[0][0] for x in sorted_mutated_read[smr_index][misp_field]]
-
-			else:
-				#currently not handle insertion reads
-				insertion = True
-				#continue
-			if not insertion:
-				tmp_misP_set = set(tmp_misP)
-				stop_con = False
-				for mp in tmp_misP:
-					found = False
-
-					#for protein_pos in protein_loc:
-					for r in protein_loc:
-						# move bases inside this protein region only
-
-						if mp in r and mp < r.stop-2:
-							found = True
-							# location = int((pos-r.start)/3)
-							index = (mp - r.start) % 3
-
-							ref_codon = ref[mp - index:mp + (3 - index)]
-							if sorted_mutated_read[smr_index][read_field][mp-smr_read_index] != "-":
-								#need to consider multiple misp together
-								mut_codon = ""
-
-								# mut_codon = ref_codon[0:index] + sorted_mutated_read[smr_index][read_field][mp-smr_read_index] + ref_codon[index + 1:]
-								for i in range(mp-index,mp+(3-index)):
-									# if the adjacent spots are also misPs, will use the read's adjecent spot instead of ref
-									if i in tmp_misP_set and 0 <= i-smr_read_index < len(sorted_mutated_read[smr_index][read_field]):
-										mut_codon += sorted_mutated_read[smr_index][read_field][i-smr_read_index]
-									else:
-										mut_codon += ref[i]
-
-								if mut_codon == "TAA" or mut_codon == "TGA" or mut_codon == "TAG":
-									print("stop codon produced by",sorted_mutated_read[smr_index], tmp_misP)
-									stop_con = True
-									break
-							#else:
-
-								#mut_codon = ref_codon[mp - index:mp] + ref[mp + 1:pos + (3 - index) + 1]
-
-							# avoid stop condon produced by substitution
-						if stop_con or found:
-							break
-				if stop_con:
 					continue
-				reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
-			else:
-				#insertion read included
+				else:
+					added_read.add(sorted_mutated_read[smr_index][read_field])
+				#print(smr_index,sorted_mutated_read[smr_index])
+				tmp_misP = []
+				smr_read_index = sorted_mutated_read[smr_index][index_field]-1
+				insertion = False
+				if "I" not in sorted_mutated_read[smr_index][cigar_field]:
+					#get misp list for this read
+					tmp_misP = [list(x.items())[0][0] for x in sorted_mutated_read[smr_index][misp_field]]
 
-				reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
+				else:
+					#currently not handle insertion reads
+					insertion = True
+
+					#continue
+				if not insertion:
+					tmp_misP_set = set(tmp_misP)
+					stop_con = False
+					for mp in tmp_misP:
+						found = False
+
+						#for protein_pos in protein_loc:
+						for r in protein_loc:
+							# move bases inside this protein region only
+
+							if mp in r and mp < r.stop-2:
+								found = True
+								# location = int((pos-r.start)/3)
+								index = (mp - r.start) % 3
+
+								ref_codon = ref[mp - index:mp + (3 - index)]
+								if sorted_mutated_read[smr_index][read_field][mp-smr_read_index] != "-":
+									#need to consider multiple misp together
+									mut_codon = ""
+
+									# mut_codon = ref_codon[0:index] + sorted_mutated_read[smr_index][read_field][mp-smr_read_index] + ref_codon[index + 1:]
+									for i in range(mp-index,mp+(3-index)):
+										# if the adjacent spots are also misPs, will use the read's adjecent spot instead of ref
+										if i in tmp_misP_set and 0 <= i-smr_read_index < len(sorted_mutated_read[smr_index][read_field]):
+											mut_codon += sorted_mutated_read[smr_index][read_field][i-smr_read_index]
+										else:
+											mut_codon += ref[i]
+
+									if mut_codon == "TAA" or mut_codon == "TGA" or mut_codon == "TAG":
+										print("stop codon produced by",sorted_mutated_read[smr_index], tmp_misP)
+										stop_con = True
+										break
+								#else:
+
+									#mut_codon = ref_codon[mp - index:mp] + ref[mp + 1:pos + (3 - index) + 1]
+
+								# avoid stop condon produced by substitution
+							if stop_con or found:
+								break
+					if stop_con:
+						continue
+					reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
+				else:
+					#insertion read included
+
+					reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
 
 			'''
 			for i,base in enumerate(sorted_mutated_read[smr_index][read_field]):
@@ -451,10 +460,17 @@ if __name__ == "__main__":
 				for line in otherside_potential_mutated:
 					opmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 		'''
-		del smr_index
-		del smr_read_index
-		#assemble
+			del smr_index
+			del smr_read_index
+		else:
+			for read in sorted_mutated_read:
+				if read[read_field] not in added_read:
+					reduced_sorted_mutated_read.append(read)
+					added_read.add(read[read_field])
 
+
+
+		#assemble
 
 		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
 		pos_sorted_mutated_read = identify_verify.fix_s_pos(pos_sorted_mutated_read,restore=True)
@@ -468,7 +484,7 @@ if __name__ == "__main__":
 		rn_cvg_list= []
 		nearly_rn_cvg_list = []
 		print(intermit_matrix_info.real_narrowed_matrix.shape,intermit_matrix_info.nearly_real_narrowed_matrix.shape)
-		for i in spike_range:
+		for i in gap_range:
 			if i >= intermit_matrix_info.real_narrowed_matrix.shape[1]:
 				break
 			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
@@ -505,7 +521,7 @@ if __name__ == "__main__":
 	intermit_matrix_info = bm.build_insertion(intermit_matrix_info, count_threshold)
 	#print("real_narrowed matrix formed ", intermit_matrix_info.real_narrowed_matrix.shape, "time is ", time.time() - start_time)
 
-	add_matrix = intermit_matrix_info.real_narrowed_matrix.copy()
+	add_matrix = intermit_matrix_info.narrowed_matrix.copy()
 	insertion_columns_list = intermit_matrix_info.insertion_columns_list
 	print("insertion matrix set, time", time.time() - prev_time)
 	# print(sorted(np.unique(np.array(insertion_columns))))

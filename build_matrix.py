@@ -108,7 +108,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 	included_i = 0
 	if not initial:
 		# building matrix for different narrowed reads
-		if matrix_info is None or (target != "nearly_real_narrowed" and target != "real_narrowed" and target != "raw"):
+		if matrix_info is None or (target != "insertion" and target != "nearly_real_narrowed" and target != "real_narrowed" and target != "raw"):
 			print("didn't provide matrix_info, or correct target exiting")
 			exit(4)
 		for i in range(len(all_read)):
@@ -160,6 +160,8 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 			matrix_info.real_narrowed_matrix = target_matrix.copy()
 		elif target == "nearly_real_narrowed":
 			matrix_info.nearly_real_narrowed_matrix = target_matrix.copy()
+		elif target == "insertion":
+			matrix_info.narrowed_matrix = target_matrix.copy()
 		info_collection = matrix_info
 
 	else:
@@ -186,6 +188,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 			tmp_length = 0
 			base_length = 0
 			matched = 0
+			insert_length = 0
 			for block in cigar_str:
 				m = re.search(r'([0-9]+)([MIDSH])', block)
 				bl = int(m.group(1)) + ini
@@ -205,6 +208,8 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 				# if iread[4]=="140M2D10M":
 				#	print(block, int(m.group(1)))
 				base_length += int(m.group(1))
+				if bt == "I":
+					insert_length += int(m.group(1))
 				if bt != "I" and bt != "H":
 					tmp_length += int(m.group(1))  # get read length without counting clipped bases
 			if target != "raw":
@@ -237,13 +242,14 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 			begin = 0
 			reduce = 0  # deduct "non-existent" bases in total length, "D" and "H" not shown in reads
 			curr_pos = 0
+			insertion_offset = 0
 			for j in range(0, blk_pos[-1]):  # change here to fill the blank with 0?
 
 				if blk_type[c] == "M":
 					try:
 						sam_q_num.append(dict_tonu[sam_q[j - reduce]])
 					except:
-						print(j - reduce, len(sam_q), i)
+						print(j - reduce+insertion_offset, len(sam_q), i,j)
 						exit(1)
 
 				elif blk_type[c] == "I":
@@ -260,7 +266,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 						sam_q_num.append(0)
 				if blk_type[c] == "H" or blk_type[c] == "D":
 					reduce += 1
-
+				#print(j, blk_type[c], blk_pos[c] - 1, sam_q[j - reduce], sam_q_num[-1])
 				if j == blk_pos[c] - 1:  # update start and c, put inserts into hashtable
 
 					if blk_type[c] == "I":
@@ -268,10 +274,13 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 						if i in insertion_reads.keys():
 
 							newinsert = copy.deepcopy(insertion_reads.get(included_i))
-							newinsert.append((index + begin, inserts))
+							newinsert.append((index + begin-insertion_offset, inserts))
 							insertion_reads.update({included_i: newinsert})
 						else:
-							insertion_reads.update({included_i: [(index + begin, copy.deepcopy(inserts))]})
+							insertion_reads.update({included_i: [(index + begin-insertion_offset, copy.deepcopy(inserts))]})
+
+						insertion_offset += blk_pos[c] - begin
+						assert insertion_offset <5,str(insertion_offset)+" "+str(begin)
 					begin = blk_pos[c]
 					inserts = []
 
@@ -280,6 +289,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 						break
 
 				curr_pos += 1
+
 			if blk_type[0] == "S":
 				if index - blk_pos[0] < 0:
 
@@ -306,6 +316,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 			row_tmp = [int(included_i)] * tmp_length
 			row_l.extend(row_tmp)
 			col_tmp = [n for n in range(index, index + tmp_length)]
+
 			col_l.extend(col_tmp)
 			if len(sam_q_num) != len(row_tmp) or len(sam_q_num) != len(col_tmp):
 				print(iread[0], i, index, len(row_tmp), len(col_tmp), len(sam_q_num), tmp_length, iread[4])
@@ -351,17 +362,25 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 	return info_collection
 
 
-def build_insertion(intermit_matrix_info, count_threshold):
+def build_insertion(matrix_info, count_threshold):
+	"""
+	need to fix insertion column pos error
+	:param matrix_info:
+	:param count_threshold:
+	:return:
+	"""
 	#print("currently not used")
-	return intermit_matrix_info
+
+	#return intermit_matrix_info
+
 	# global maxposition,exclude_reads,read_number,cor_record
-	max_shape = intermit_matrix_info.max_shape
-	insertion_reads = intermit_matrix_info.insertion_reads
-	csc = intermit_matrix_info.narrowed_matrix
+	max_shape = matrix_info.max_shape
+	insertion_reads = matrix_info.insertion_reads
+	csc = matrix_info.narrowed_matrix
 	insertion_columns = set({})
 	print("add_matrix", max_shape)
 	add_matrix = sp.coo_matrix(max_shape, dtype=np.int32).tocsc()
-
+	print(insertion_reads)
 	for i in insertion_reads.keys():
 		for j in insertion_reads[i]:
 			index = 0
@@ -455,9 +474,10 @@ def build_insertion(intermit_matrix_info, count_threshold):
 
 	if len(insertion_columns_list) > 0:
 		# tmp_list = bm.get_rowcolval()
-		row = intermit_matrix_info.row
-		col = intermit_matrix_info.col
-		val = intermit_matrix_info.val
+		print(insertion_columns_list)
+		row = matrix_info.row
+		col = matrix_info.col
+		val = matrix_info.val
 		print("copyting csc to addmatrix if insertions are sure")
 		del i
 		for i in insertion_columns_list:
@@ -505,10 +525,11 @@ def build_insertion(intermit_matrix_info, count_threshold):
 	else:
 		print("no insertion")
 		add_matrix = csc
-	intermit_matrix_info.real_narrowed_matrix = add_matrix
-	intermit_matrix_info.insertion_columns_list = insertion_columns_list
+	#intermit_matrix_info.real_narrowed_matrix = add_matrix
+	matrix_info.narrowed_matrix = add_matrix
+	matrix_info.insertion_columns_list = insertion_columns_list
 
-	return intermit_matrix_info
+	return matrix_info
 
 
 def narrow_reads(ref, narrowed_read, out_dir, brute_force=True):
@@ -609,8 +630,8 @@ def narrow_reads(ref, narrowed_read, out_dir, brute_force=True):
 			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 
 	if len(mated) == 0:
-		print("no read satisfies condition, exiting")
-		exit(-2)
+		print("no read satisfies paired matched condition, exiting")
+		#exit(-2)
 
 
 	if brute_force:
@@ -624,7 +645,7 @@ def narrow_reads(ref, narrowed_read, out_dir, brute_force=True):
 					potential_mutated_reads.append(line)
 					pmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 
-
+		print(len(potential_mutated_reads),"potential mutated reads")
 
 
 		return true_total_match,mated,nearly_true_total,potential_mutated_reads

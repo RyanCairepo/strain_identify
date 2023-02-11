@@ -20,18 +20,21 @@ function  help {
         two read files separately"
     echo "-f:    For fasta reads, add -f "
     echo "-0: -0 read_file.fastq for a single read file"
+    echo "-s: -s N the program will try to find N strains"
     exit 2
 }
 mode="tog"
 aligner="bowtie2"
 round=5
-check_gap=False
+check_gap=false
 out_dir="none"
 #echo "args are:"
 #echo "$@"
 #echo "${#@}"
 delete="n"
-while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:" option; do
+threshold=1
+strain_num=2
+while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:t:s:" option; do
     ((optnum++))
    case ${option} in
       h) # display Help
@@ -61,12 +64,15 @@ while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:" option; do
         echo "$round";;
     c)
         check_gap=${OPTARG}
-        echo "$check_gap";;
+        echo "check gap $check_gap";;
+    t) threshold=${OPTARG}
+        echo "gap threshold $threshold";;
     d)
         delete=${OPTARG};;
     o)
         out_dir=${OPTARG};;
-
+    s)
+        strain_num=${OPTARG};;
    esac
 done
 
@@ -75,8 +81,6 @@ if [ $OPTIND -eq 1 ]; then
     help
 fi
 shift $((OPTIND -1))
-
-
 
 
 
@@ -130,11 +134,12 @@ function  alignment {
                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -f -1 "$read1" -2 "$read2" --local > gene.sam
                 else
                     echo "bowtie2 alignment"
-                    if [ ! $check_gap ];then
-                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local --score-min G,10,4 > gene.sam
+                    if [ "$check_gap" = false ];then
+
+                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local  --score-min G,10,4 > gene.sam
                     else
                         echo "check_gap" $check_gap
-                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local --score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50 > gene.sam
+                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local > gene.sam #--score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50 
                     fi
                 fi
             elif [ "$aligner" == "minimap2" ]; then
@@ -346,18 +351,19 @@ a="--gene_L=${fL}";
 b="--read_L=${rL}";
 #ref=$(<../${1})
 #echo $ref
-if [ ! "$check_gap" ]; then
+if  [ "$check_gap" = false ]; then
     match_limit=0.95
+    echo "finding strain"
 else
     match_limit=0.7 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
     echo "check_gap match_limit $match_limit"
 fi
-echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap} --output_dir=${out_dir}";
+echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap}  --gap_threshold=${threshold} --output_dir=${out_dir}";
 
 
 
 if [ -e "$read1" ] && [ -e "$read2" ]; then
-    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --output_dir="$out_dir";
+    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --gap_threshold="$threshold" --output_dir="$out_dir" --region_break=;
 else
 
    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
@@ -378,15 +384,17 @@ echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
 #after obtaining sub_read_candidates.sam from strain_finder.py
 #generate compact fastq files for strain identification
 
-if [ $check_gap == "False" ] ; then
+if [ $check_gap = false ] ; then
     python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
+    cp half_real_R1.fastq "${out_dir}"
+    cp half_real_R2.fastq "${out_dir}"
 
 else
     exit
 fi
 #combining other SRR here
 # loop strain number
-python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "half_real_R1.fastq" "half_real_R2.fastq" 2
+python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real_R1.fastq" "${out_dir}/half_real_R2.fastq" $strain_num
 
 
 cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
