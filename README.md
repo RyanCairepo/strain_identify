@@ -1,41 +1,31 @@
-# InsEC
-InsEC is an instance-based error correction tool which is capable of rectifying errors with very high accuracy for the reads of disease-causing genes.
-The key idea is to exploit local sequence features related to the instance reads so as to achieve better error correction than the global approaches. 
+This program contains code for identifying within-host diversity.
 
-The method has two main steps.
-The extraction step collects those reads relevant to a given gene from a WGS dataset through a noise-tolerant mapping technique.
-In the correction step, we take advantage of alignment processes and rectify errors according to the exhaustive alignment patterns and statistics.
+The required python3 packages are:
+collections, copy, pandas, numpy, scipy.sparse, typing, argparse, statistics
 
-## Dependancies
-BWA-MEM tool is used in extraction step. Here is the instruction of BWA-MEM installation (https://github.com/bwa-mem2/bwa-mem2).
+Steps to run the program:
+1. obtain the read files, preferably in fastq format
+2. obtain the reference sequence in fasta format
+3. run the strain identification process with /path/to/find_sub.sh -r reference.fa -1 read_1.fastq -2 read_2.fastq -m tog 
+if the read files are in fasta format,
+/path/to/find_sub.sh -r reference.fa -1 read_1.fasta -2 read_2.fasta -m tog -f
+if the read file is single-ended:
+find_sub.sh -r reference.fa -0 read_file.fastq
 
-It requires python 3 or later.
+The output consists of the nucleotide sequences of detected strains, named in the format "final_strain_x_reference.fa", x is the numerical label of strains, and "subbed_read_x.fa", a set of reads that belong to this strains and are different from the reference sequence.
 
-## Download & Usage
+4. optional step of verification. Start by obtaining relevant samples. After that, run combine_alignment.sh -p sample1_r1.fastq sample1_r2.fastq sample2_r1.fastq sample2_r2.fastq
+For single end read files, run combine_alignment.sh -s sample1.fasta sample2.fasta
 
-	git clone https://github.com/xuanrzhang/InsEC
-	cd InsEC	
-	chmod +x run.sh
-	pip install pandas (optional command, if you don't install pandas before)
-	
-	./run.sh [sequence.fa] [reads.fa]
-	e.g 
-	./run.sh ref.fa reads.fa
-  
-## Data format
-Input: A read dataset in .fasta\fastq format and an nucleotide sequence of interests in .fasta format
+The output of the previous step is stored in combine_extract.sam. Run:
+ verify.py N final_strain_N_reference.fa combine_extract.sam 
+N is the numerical labelling of strain from step 3.
 
-	- reads.fa(\fq) : store the whole read data needed to be corrected.
-	- ref.fa : store the nucleotide sequence of interests (e.g. a sequence of genes or a sequence of coding region).
+5. optional step for inferring synonymous state. It determines the changes in the nucleotide sequences are synonymous or non-synonymous. 
+python synonymous_stat.py original_reference_sequence.fa subbed_read_N.sam translation_code.txt protein_pos.txt
+transation_code.txt is the translation table from nucleotide bases to amino acid bases. protein_pos.txt is the position of proteins, in the form of protein_name:start..end
 
-Output: A corrected read dataset only related to the given nucleotide sequence and An assembled contig based on corrected data
 
-	- corrected.fa :store corrected read data.
-	- contigs.fa :store the updated nucleotide sequence of the gene (or the genome region of interests).
 
-	
-## Citation
-Please cite the work "Instance-based error correction for short reads of disease genes."
 
-## Citation
-If any bugs during your running, please email to xzhangxmu@gmail.com
+ protein position file, with protein start and end positions in the format protein:start1..end1, example in protein_pos.txt 
