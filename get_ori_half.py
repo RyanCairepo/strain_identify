@@ -14,13 +14,17 @@ def get_ori_half(samfile, readfile1, readfile2):
 			# print(len(line.split(" ")),"IDs counted")
 			IDs.add(line.split(" ")[0])
 	# print(IDs)
-	print("getting", len(IDs), " IDs of reads from " + readfile1 + " and " + readfile2)
-	if len(sys.argv) < 4:
-		print("get_ori_read() insufficient args")
-		exit(2)
-	with mp.Pool(2) as pool:
-		lparam = [(IDs, readfile1, "half_real_R1.fastq"), (IDs, readfile2, "half_real_R2.fastq")]
-		pool.starmap(search_ID, lparam)
+	if readfile2 != "none":
+		print("getting", len(IDs), " IDs of reads from " + readfile1 + " and " + readfile2)
+		if len(sys.argv) < 4:
+			print("get_ori_read() insufficient args")
+			exit(2)
+		with mp.Pool(2) as pool:
+			lparam = [(IDs, readfile1, "half_real_R1.fastq"), (IDs, readfile2, "half_real_R2.fastq")]
+			pool.starmap(search_ID, lparam)
+	else:
+		print("getting", len(IDs), " IDs of reads from " + readfile1)
+		search_ID(IDs, readfile1, "half_real.fastq")
 def search_ID(id_set, readfile, outfile):
 	ori_reads = []
 	count = 0
