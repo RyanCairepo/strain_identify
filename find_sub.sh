@@ -21,6 +21,7 @@ function  help {
     echo "-f:    For fasta reads, add -f "
     echo "-0: -0 read_file.fastq for a single read file"
     echo "-s: -s N the program will try to find N strains"
+    echo "-p: -p protein_position_file "
     exit 2
 }
 mode="tog"
@@ -34,7 +35,8 @@ out_dir="none"
 delete="n"
 threshold=1
 strain_num=2
-while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:t:s:" option; do
+protein_pos=""
+while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:t:s:p:" option; do
     ((optnum++))
    case ${option} in
       h) # display Help
@@ -73,6 +75,8 @@ while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:t:s:" option; do
         out_dir=${OPTARG};;
     s)
         strain_num=${OPTARG};;
+    p)
+        protein_pos=${OPTARG};;
    esac
 done
 
@@ -117,12 +121,16 @@ function  alignment {
     echo "start read extraction"
     if [ -e "$read"  ]; then
         echo "align single read file"
-        if [ $aligner == "minimap2" ]; then
-            ${DIR}/minimap2/minimap2 -ax sr "$ref" "$read" > gene.sam
-        elif [ $aligner == "bowtie2" ]; then
-            ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -i "$read" > gene.sam
+        if [ -e "$fasta" ] && [ $fasta == "t" ]; then
+             ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -f -r "$read1"  --local > gene.sam
         else
-            ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t $core_count "$ref" "$read"  > gene.sam
+            if [ $aligner == "minimap2" ]; then
+                ${DIR}/minimap2/minimap2 -ax sr "$ref" "$read" > gene.sam
+            elif [ $aligner == "bowtie2" ]; then
+                ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -r "$read" --local > gene.sam
+            else
+                ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t $core_count "$ref" "$read"  > gene.sam
+            fi
         fi
 
     elif [ -e "$read1" ] && [ -e "$read2" ];then
@@ -322,11 +330,12 @@ echo "$ref" "$read1" "$read2" "$mode" "$check_gap" "$aligner" > "$out_dir"/args.
 build_index
 alignment
 
-if [ ! -e "$read" ] && [ "$mode" != "sep" ]; then
+if [ "$mode" != "sep" ]; then
+    #single file for two files align together
     echo "get matched reads"
     split_sam gene.sam
     extract_sam
-elif [ "$mode" == "sep" ] && [ -e "$read" ]; then
+else
     extract_sam gene.sam
     cp extract.sam 1_extract.sam
     cp full_extract.sam 1_full_extract.sam
@@ -336,6 +345,7 @@ elif [ "$mode" == "sep" ] && [ -e "$read" ]; then
     cat full_extract.sam >> 1_full_extract.sam
     cp 1_extract.sam extract.sam
     cp 1_full_extract.sam full_extract.sam
+
 fi
 if [ ! -d intermit_out ]; then
     mkdir intermit_out
@@ -358,15 +368,15 @@ else
     match_limit=0.7 #$(echo "scale=2; ((100.0-$i+1)/100)" |bc -l)
     echo "check_gap match_limit $match_limit"
 fi
-echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True --bubble_mode=True --check_gap=${check_gap}  --gap_threshold=${threshold} --output_dir=${out_dir}";
+echo "python3 strain_finder.py $a  --ref=${ref} --narrowing=True --match_l=$match_limit --sam_file=extract.sam --r1_file=${read1} --r2_file=${read2} --excluded_IDs=/dev/null --find_sub=True  --check_gap=${check_gap}  --gap_threshold=${threshold} --output_dir=${out_dir}";
 
 
 
 if [ -e "$read1" ] && [ -e "$read2" ]; then
-    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --gap_threshold="$threshold" --output_dir="$out_dir" --region_break=;
+    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read1" --r2_file="$read2" --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --gap_threshold="$threshold" --output_dir="$out_dir" --region_break="$protein_pos";
 else
 
-   python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True ;
+   python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file=extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --gap_threshold="$threshold" --output_dir="$out_dir" --region_break="$protein_pos";
 fi
 err=$?
 
@@ -385,16 +395,24 @@ echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
 #generate compact fastq files for strain identification
 
 if [ $check_gap = false ] ; then
-    python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
-    cp half_real_R1.fastq "${out_dir}"
-    cp half_real_R2.fastq "${out_dir}"
+    if [ -e "$read1" ] && [ -e "$read2" ]; then
+        python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
+        cp half_real_R1.fastq "${out_dir}"
+        cp half_real_R2.fastq "${out_dir}"
+        python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real_R1.fastq" "${out_dir}/half_real_R2.fastq" $strain_num
+    else
+        python3 "${DIR}"/get_ori_half.py extract.sam "${read}" "none"
+        cp half_real.fastq "${out_dir}"
+        python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real_R1.fastq" "none" $strain_num
+    fi
 
 else
     exit
 fi
 #combining other SRR here
 # loop strain number
-python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real_R1.fastq" "${out_dir}/half_real_R2.fastq" $strain_num
+
+
 
 
 cp narrowed_cvg.txt "$out_dir"/narrowed_cvg.txt
@@ -403,22 +421,3 @@ cp nearly_real_narrowed_cvg.txt "$out_dir"/
 cp thin_* "$out_dir"/
 cp mutated_read_freq* "$out_dir"/
 
-
-#    "${DIR}"/megahit/build/megahit -1 "$out_dir"/half_real_R1.fastq -2 "$out_dir"/half_real_R2.fastq -o "$contig_dir"
-#
-#    if [ "$(wc -l "$contig_dir"/final.contigs.fa | cut -d' ' -f1)" -gt 2 ]; then
-#        echo "more than one contig formed"
-#        longest=$(grep -oEi 'len=([0-9]+)' -A 1 "$contig_dir"/final.contigs.fa | cut -d '=' -f2 | sort -n | tail -1)
-#        grep $longest -A 1 "$contig_dir"/final.contigs.fa > "$out_dir"/round_"$i"_contig.fa
-#    else
-#        cp "$contig_dir"/final.contigs.fa "$out_dir"/round_"$i"_contig.fa
-#    fi
-#    cL=$(tr -d '\r' < "$out_dir"/round_"$i"_contig.fa | awk 'BEGIN{RS="\n"}{if(substr($0,1,1) ~ /\>/ ) printf("%s", $NF);next}  '  | wc -m)
-#    if [ $cL -lt 25000 ]; then
-#        echo "contig formed too short, $cL"
-#        exit
-#    fi
-#    ref="$out_dir"/round_"$i"_contig.fa
-
-
-#done

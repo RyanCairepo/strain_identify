@@ -15,40 +15,6 @@ import identify_verify
 import strain_finder as st_find
 import identify_verify as idv
 
-def verify_seq_support(temp_ref,batch,readfile1, readfile2):
-	"""
-	Find if the reads support a sequence with no gaps by running alignment
-	:param temp_ref: sequence to be tested
-	:param batch: batch number
-	:param readfile1:
-	:param readfile2:
-	:return: gap list
-	"""
-	with open("batch_" + str(batch) + "_reference.fa", "w+") as bf:
-		bf.write(">batch_" + str(batch) + "\n")
-		bf.write(temp_ref)
-	verify_sub_command = os.path.dirname(
-		__file__) + "/find_sub.sh" + " " + "-r" + " " + "batch_" + str(
-		batch) + "_reference.fa" + " " + "-1" + " " + readfile1 + " " + "-2" + " " + readfile2 + " " + "-m" + " " + "tog" + " " + "-a" + " " + "bowtie2" + " " + "-c" + " " + 'True' + " -d Y"
-
-	verify_proc = subprocess.run(verify_sub_command,
-								 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
-								 shell=True)
-	# print(verify_proc.stdout.split("\n")[-5:])
-	gap_list = verify_proc.stdout.split("\n")[-3]
-	if gap_list != "no gaps":
-
-
-		gap_list = re.sub('[\[\]]', '', gap_list)
-		gap_list= gap_list.split(",")[:-1]
-		print(gap_list)
-
-		return gap_list
-	# gap_list = gap_list.split(",")[:-1]
-	# ref = ref[:read_index] + ref_seq[read_index:read_index+len(read[3])] + ref[read_index + len(read[3]):]
-	# subbed_read.remove(read)
-	else:
-		return []
 
 def new_verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, candidate_sam,stage=0):
 	"""
@@ -637,9 +603,17 @@ def curr_gap_reads(ref, strain, subbed_read, candidate_read, matrix, read_freq, 
 	:param misp_conflict: misp that causes gaps when placed together, format {pos:{pos_misp:[changed_base]}}
 	:return:
 	"""
-	readfile1 = "half_real_R1.fastq"
-	readfile2 = "half_real_R2.fastq"
 
+
+	if os.path.exists("half_real_r1.fastq") and os.path.exists("half_real_r2.fastq"):
+		readfile1 = "half_real_R1.fastq"
+		readfile2 = "half_real_R2.fastq"
+	else:
+		if os.path.exists("half_real.fastq"):
+			readfile1 = "half_real.fastq"
+			readfile2 = "none"
+		else:
+			raise "Error: reduced version reads error"
 	prev_readset = set({})
 	covered_pos = {}
 	for i in range(0, strain + 1):
@@ -705,7 +679,7 @@ def curr_gap_reads(ref, strain, subbed_read, candidate_read, matrix, read_freq, 
 		temp_ref = ref[:read_index] + read[st_find.read_field] + ref[read_index + len(read[st_find.read_field]):]
 		# print(editdistance.eval(temp_ref,ref))
 
-		gap_list = verify_seq_support(temp_ref,batch,readfile1,readfile2)
+		gap_list = identify_verify.verify_seq_support(temp_ref,batch,readfile1,readfile2)
 		if len(gap_list) == 0:
 			subbed_read.append(candidate_read[batch])
 			subbed_read_set.add(read[st_find.read_field])

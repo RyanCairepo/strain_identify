@@ -90,6 +90,8 @@ def read_sam(R_file,freq=False):
 
 	return read_list
 
+
+
 def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_info=None, target="real_narrowed"):
 	# global narrowed_read,maxposition, read_number,row,val,col
 
@@ -280,7 +282,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 							insertion_reads.update({included_i: [(index + begin-insertion_offset, copy.deepcopy(inserts))]})
 
 						insertion_offset += blk_pos[c] - begin
-						assert insertion_offset <5,str(insertion_offset)+" "+str(begin)
+
 					begin = blk_pos[c]
 					inserts = []
 

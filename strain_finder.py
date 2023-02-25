@@ -150,10 +150,6 @@ if __name__ == "__main__":
 		first_round = True
 	else:
 		first_round = False
-	if args.bubble_mode == "True":
-		bubble_mode = True
-	else:
-		bubble_mode = False
 
 	if args.misp_mode == "True":
 		misp_mode = True
@@ -173,7 +169,7 @@ if __name__ == "__main__":
 	with open(args.ref, 'r') as refg:
 		for line in refg:
 			if ">" not in line:
-				ref += line.strip()
+				ref += line.strip().strip(" ")
 
 	# -------read marked IDs from last round
 	marked_id = set({})
@@ -203,7 +199,7 @@ if __name__ == "__main__":
 																					out_dir, True)
 
 	#real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, False)
-	# del initial_matrix_info
+
 	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed,match_limit,marked_id,False,intermit_matrix_info,"nearly_real_narrowed")
@@ -214,11 +210,13 @@ if __name__ == "__main__":
 	intermit_matrix_info.nearly_real_narrowed_read = nearly_real_narrowed
 	#intermit_matrix_info.narrowed_read = copy.deepcopy(initial_matrix_info.narrowed_read)
 	#intermit_matrix_info.narrowed_matrix = initial_matrix_info.real_narrowed_matrix.copy()
+
+
 	#------------------------------------------brute force mode----------
 	gaps = []
 	cols =[]
-
-	for column in range(100,intermit_matrix_info.real_narrowed_matrix.shape[1]):
+	del initial_matrix_info
+	for column in range(400,intermit_matrix_info.real_narrowed_matrix.shape[1]):
 		tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(column).toarray())
 		tmp_count = np.bincount(tmp)[1:]
 		cols.append(column)
@@ -270,7 +268,7 @@ if __name__ == "__main__":
 		for tr in sorted_mutated_read:
 			tr.append(mutated_read_freq[tr[read_field]])
 
-		misPs,misP_source,misP_reads,sorted_mutated_read = identify_verify.get_misp(ref, sorted_mutated_read)
+
 		#print({k:v for k,v in mutated_read_freq.items() if v > 1 })
 		print(sorted_mutated_read)
 		smr_index = 0
@@ -278,23 +276,13 @@ if __name__ == "__main__":
 		added_read = set({})
 		reduced_sorted_mutated_read = []
 		if args.region_break != "":
+			misPs, misP_source, misP_reads, sorted_mutated_read = identify_verify.get_misp(ref, sorted_mutated_read)
 			endpoints_list = []
 			with open(args.region_break,"r") as ppf:
 				for line in ppf:
 					fields = line.split(":")
 					endpoints_list.append(fields[1].strip())
 
-			'''endpoints = 266..21555
-			21563..25384
-			25393..26220
-			26245..26472
-			26523..27191
-			27202..27387
-			27394..27759
-			27756..27887
-			27894..28259
-			28274..29533
-			29558..29674'''
 			#endpoints_list = endpoints.split("\n")
 			protein_loc = []  # (265,21555)
 			for se in endpoints_list:
@@ -508,7 +496,7 @@ if __name__ == "__main__":
 	else:
 		del potential_mutated
 
-	assert intermit_matrix_info.real_narrowed_matrix.shape[1] == intermit_matrix_info.narrowed_matrix.shape[1]
+	#assert intermit_matrix_info.real_narrowed_matrix.shape[1] == intermit_matrix_info.narrowed_matrix.shape[1]
 	print("narrowed_reads", len(intermit_matrix_info.narrowed_read), "real narrowed",
 		  len(intermit_matrix_info.real_narrowed_read), "nearly real narrowed", len(intermit_matrix_info.nearly_real_narrowed_read))
 	print("narrowed_shape", intermit_matrix_info.narrowed_matrix.shape, "real narrowed shape",
@@ -608,238 +596,27 @@ if __name__ == "__main__":
 
 	# --------------------get cvg-------------------
 
-	if bubble_mode:
-		print("---------------------------bubble mode-----------------------")
-		empty_count = 0
-		i = 0
-		narrowed_cvg_list = []
-		nearly_narrowed_cvg_list = []
-		real_narrowed_cvg_list = []
-		bubbles = {}
-		ratios = {}
-		n_min = (0, 100000)
-		rn_min = 100000
-		rn_min_index = -1
-		ratio_max = -1
-		ratio_max_index = -1
-		nearly_rn_max = -1
-		nearly_rn_max_index = -1
-		#for i in range(0, intermit_matrix_info.real_narrowed_matrix.shape[1]):
-		for i in range(21562,25384):
-			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
-			tmp_count = np.bincount(tmp)[1:]
-			real_narrowed_cvg_list.append(sum(tmp_count))
-			if rn_min > sum(tmp_count) > 0:
-				rn_min = sum(tmp_count)
-				rn_min_index = i
 
-			tmp1 = np.squeeze(intermit_matrix_info.narrowed_matrix.getcol(i).toarray())
-			tmp_count1 = np.bincount(tmp1)[1:]
-			narrowed_cvg_list.append(sum(tmp_count1))
-			if n_min[1] > sum(tmp_count1) > 0:
-				n_min = (i, sum(tmp_count1))
+	cvg_list = []
+	i= 0
+	for i in range(0,intermit_matrix_info.real_narrowed_matrix.shape[1]):
+		tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
+		tmp_count = np.bincount(tmp)[1:]
+		cvg_list.append(sum(tmp_count))
 
-			bub = narrowed_cvg_list[-1] - real_narrowed_cvg_list[-1]
-			tmp2 = np.squeeze(intermit_matrix_info.nearly_real_narrowed_matrix.getcol(i).toarray())
-			tmp_count2 = np.bincount(tmp2)[1:]
-			nearly_narrowed_cvg_list.append(sum(tmp_count2))
-
-			ratio = sum(tmp_count2)/sum(tmp_count)
-			if sum(tmp_count) == 0:
-				print(i,tmp_count)
-				exit()
-
-			if ratio_max < ratio:
-				ratio_max = ratio
-				ratio_max_index = i
-			if sum(tmp_count2)> nearly_rn_max:
-				nearly_rn_max= sum(tmp_count2)
-				nearly_rn_max_index = i
-			bubbles.update({i: bub})
-			ratios.update({i: ratio})
-			if sum(tmp_count) ==0 or sum(tmp_count1) == 0:
-				empty_count += 1
-
-		#rn_min_index = 21542
-		#rn_min = 486
-		print(rn_min, rn_min_index, n_min, nearly_rn_max,nearly_rn_max_index)
-		print(ratio_max,ratio_max_index,real_narrowed_cvg_list[ratio_max_index-21562], nearly_narrowed_cvg_list[ratio_max_index-21562])
-		sg_range = list(range(ratio_max_index - 150, ratio_max_index + 150))
-		rn_sg_extend = 75
-		nearly_rn_covered_reads = []
-		side_bubble_reads = []
-		test_nearly_rn_id_list = []
-		for rn_i in sg_range:
-			#rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_i).toarray())
-			nearly_rn_tmp = np.squeeze(intermit_matrix_info.nearly_real_narrowed_matrix.getcol(rn_i).toarray())
-			# print("rn sg-i", np.bincount(rn_tmp)[1:])
-			# print("n sg-i",np.bincount(n_tmp)[1:])
-			#rn_readnum = np.nonzero(rn_tmp)[0]
-
-			# real_before = copy.deepcopy(intermit_matrix_info.real_narrowed_read)
-			#tmp_rn_read_list, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
-			#																	   intermit_matrix_info.real_narrowed_read)
-
-			# test_thinread_set, test_narrowed_read = bm.marking_byid(list(thin_readnum),rn_min,real_before,set({}))
-
-			nearly_rn_readnum = np.nonzero(nearly_rn_tmp)[0]
-
-			tmp_nearly_rn_read_list, intermit_matrix_info.nearly_reaL_narrowed_read = bm.collecting_bubbles(list(nearly_rn_readnum),
-																		 intermit_matrix_info.nearly_real_narrowed_read)
-			#tmp_nearly_rn_read_list, intermit_matrix_info.nearly_real_narrowed_read = bm.marking(nearly_rn_readnum,1000,intermit_matrix_info.nearly_real_narrowed_read)
-			#print(sum(np.bincount(nearly_rn_tmp)[1:]),nearly_rn_readnum.shape,len(tmp_nearly_rn_read_list),end=";")
-			#rn_covered_reads.extend([x[3] for x in tmp_rn_read_list])
-			nearly_rn_covered_reads.extend([x[3] for x in tmp_nearly_rn_read_list])
-			#side_bubble_reads.extend(tmp_rn_read_list)
-			side_bubble_reads.extend(tmp_nearly_rn_read_list)
-
-			test_nearly_rn_id_list.extend(tmp_nearly_rn_read_list)
-			# print(len(whole_col), len(thin_readnum))
-
-		print(len(nearly_rn_covered_reads), len(side_bubble_reads), " reads from sg_range")
-		'''		del rn_i
-		for rn_i in [x for x in range(sg_range[0]-rn_sg_extend, sg_range[-1]+rn_sg_extend) if x not in set(sg_range)]:
-		#for rn_i in [x for x in range(21563,25384) if x not in set(sg_range)]:
-			rn_tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(rn_i).toarray())
-			rn_readnum = np.nonzero(rn_tmp)[0]
-
-			# real_before = copy.deepcopy(intermit_matrix_info.real_narrowed_read)
-			tmp_rn_read_list, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
-												intermit_matrix_info.real_narrowed_read)
-			rn_covered_reads.extend([x[3] for x in tmp_rn_read_list])
-
-			side_bubble_reads.extend(tmp_rn_read_list)'''
-		rn_tmp_1 = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(ratio_max_index-225).toarray())
-		rn_readnum = np.nonzero(rn_tmp_1)[0]
-		tmp_rn_read_list_1, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
-											  intermit_matrix_info.real_narrowed_read)
-		rn_tmp_2 = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(22375).toarray())
-		rn_readnum = np.nonzero(rn_tmp_2)[0]
-		tmp_rn_read_list_2, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(rn_readnum),
-										intermit_matrix_info.real_narrowed_read)
-
-		nearly_rn_covered_reads.extend([x[3] for x in tmp_rn_read_list_1])
-		nearly_rn_covered_reads.extend([x[3] for x in tmp_rn_read_list_2])
-		side_bubble_reads.extend(tmp_rn_read_list_1)
-		side_bubble_reads.extend(tmp_rn_read_list_2)
-
-		print(len(tmp_rn_read_list_1),len(tmp_rn_read_list_2),"from sg-i -225 sg-i +225")
-
-		print(len(nearly_rn_covered_reads), " reads from sg_range_extend")
-		rn_read_set = set(nearly_rn_covered_reads)
-
-		print( len(side_bubble_reads), "  reads for side bubbles ")
-
-		#nearly_rn_id_set = set(test_nearly_rn_id_list)
-		#print(len(nearly_rn_id_set))
-
-		#bm.get_ori_half(readfile1,readfile2,nearly_rn_id_set,out_dir,intermit_matrix_info.nearly_real_narrowed_read)
-		#exit()
-
-		test_flag = format(side_bubble_reads[0][1],'b')[::-1]
-
-		if test_flag[4] == "1":
-			if test_flag[6] == "1":
-				rc_file = readfile1
-			else:
-				rc_file = readfile2
-		else:
-			if test_flag[6] == "1":
-				rc_file = readfile2
-			else:
-				rc_file = readfile1
-		#bm.get_bubble_reads(readfile1,readfile2,side_bubble_reads,out_dir, rc_file)
-
-		'''
-		with open("thin_segments_reads_IDs.txt", "w+") as tf:
-			# for rn_num in thin_readnum:
-			#	tri = intermit_matrix_info.real_narrowed_read[rn_num]
-			#	tf.write(tri[0]+" "+str(tri[1])+" "+str(tri[2])+" "+tri[3]+"\n")
-			for tr in thinread_set:
-				tf.write(tr + " ")
-		print(set(nearly_rn_covered_reads) - thinread_set)
-		with open("thin_column_reads_ID.txt", "w+") as tcf:
-			# for n_num in whole_col:
-			#	tcri = intermit_matrix_info.narrowed_read[n_num]
-			# if tcri[0] not in thinread_set:
-			#	tcf.write(tcri[0]+" "+str(tcri[1])+" "+str(tcri[2])+" "+tcri[3]+"\n")
-			for tcr in nearly_rn_covered_reads:
-				if tcr not in thinread_set:
-					tcf.write(tcr + " ")'''
-
-		bubble_list = [v for v in bubbles.values()]
-		print(len(bubble_list), len(narrowed_cvg_list), len(narrowed_cvg_list))
-		print(statistics.median(bubble_list), statistics.median(bubble_list), max(bubble_list))
-		sorted_side_bubble_reads = sorted(side_bubble_reads,key=lambda x:x[2])
-
-
-		with open("side_bubble_extract.sam","w+") as sbf:
-
-			for line in sorted_side_bubble_reads:
-				sbf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-		with open("bubbles.txt","w+") as bf:
-			for k in bubbles.keys():
-				bf.write(str(k)+": "+str(bubbles[k])+", ")
-
-		with open("nearly_real_narrowed_cvg.txt","w+") as near_rncf, open("real_narrowed_cvg.txt", "w+") as rncf:
-			for i,v in enumerate(nearly_narrowed_cvg_list):
-				near_rncf.write(str(i+21562)+": "+str(v)+", ")
-				rncf.write(str(i+21562)+": "+str(real_narrowed_cvg_list[i])+", ")
-		with open("start_end_225_reads.sam","w+") as rnf225:
-			for line in tmp_rn_read_list_1:
-				rnf225.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-			rnf225.write("------------------------------------"+"\n")
-			for line in tmp_rn_read_list_2:
-				rnf225.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-		#print(sorted(nearly_narrowed_cvg_list)[:-10],sorted(real_narrowed_cvg_list)[:-10])
-		exit()
-
-		# ----------------------plotting bubbles----------
-		'''x = np.asarray([k for k in bubbles.keys()])
-		y = np.asarray([v for v in bubbles.values()])
-		px = 1 / plt.rcParams['figure.dpi']
-		#fig, ax = plt.subplots(figsize=(9000 * px, 900 * px))
-		fig = plt.figure(figsize=(100,10))
-		print(y)
-		print(x)
-		plt.bar(x, y, align='center')
-		plt.xticks(x)
-		plt.xlabel('position')
-		plt.ylabel('bubble size')
-		#ax.set(xlim=[3800, 20])
-	
-		plt.xlim(0, 3800)
-		plt.ylim(0 ,80)
-	
-		# plt.xticks([x for x in range(100,153)])
-		# ax.xaxis.set_tick_params(width=5)
-		# fig, axs = plt.subplots(1,2, sharey=True, tight_layout=True)
-		#plt.figure(figsize=(4000,200),dpi=20)
-		print(fig)
-		# axs[0].hist(x, bins=20)
-		# axs[1].hist(y,bins=20)
-		plt.show()'''
-	else:
-		cvg_list = []
-		i= 0
-		for i in range(0,intermit_matrix_info.real_narrowed_matrix.shape[1]):
-			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(i).toarray())
-			tmp_count = np.bincount(tmp)[1:]
-			cvg_list.append(sum(tmp_count))
-
-		# cvg = statistics.median(cvg_list)
-		cvg_count = Counter(cvg_list)
-		#s_cvg_list = sorted(cvg_list)
-		#cvg = s_cvg_list[int(0.01 * len(cvg_list))]
-		cvg = 26
-		# cvg = s_cvg_list[0]
-		if cvg == 0:
-			cvg = 1
-		# cvg = 1
-		#print(cvg_count)
-		print(len(cvg_list), "cvg is set to ", cvg, "medium coverage", statistics.median(cvg_list), "minimum", min(cvg_list),
-			  "average ",
-			  statistics.mean(cvg_list))
+	# cvg = statistics.median(cvg_list)
+	cvg_count = Counter(cvg_list)
+	#s_cvg_list = sorted(cvg_list)
+	#cvg = s_cvg_list[int(0.01 * len(cvg_list))]
+	cvg = 26
+	# cvg = s_cvg_list[0]
+	if cvg == 0:
+		cvg = 1
+	# cvg = 1
+	#print(cvg_count)
+	print(len(cvg_list), "cvg is set to ", cvg, "medium coverage", statistics.median(cvg_list), "minimum", min(cvg_list),
+		  "average ",
+		  statistics.mean(cvg_list))
 
 	# print({k: v for k, v in sorted(cvg_count.items(), key=lambda x: x[0])})
 

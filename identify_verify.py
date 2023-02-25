@@ -333,10 +333,14 @@ def verify_seq_support(temp_ref,batch,readfile1, readfile2):
 	with open("batch_" + str(batch) + "_reference.fa", "w+") as bf:
 		bf.write(">batch_" + str(batch) + "\n")
 		bf.write(temp_ref)
-	verify_sub_command = os.path.dirname(
-		__file__) + "/find_sub.sh" + " " + "-r" + " " + "batch_" + str(
-		batch) + "_reference.fa" + " " + "-1" + " " + readfile1 + " " + "-2" + " " + readfile2 + " " + "-m" + " " + "tog" + " " + "-c" + " " + "True" + " -d Y"
-
+	if readfile2 != "none":
+		verify_sub_command = os.path.dirname(
+			__file__) + "/find_sub.sh" + " " + "-r" + " " + "batch_" + str(
+			batch) + "_reference.fa" + " " + "-1" + " " + readfile1 + " " + "-2" + " " + readfile2 + " " + "-m" + " " + "tog" + " " + "-c" + " " + "True" + " -d Y"
+	else:
+		verify_sub_command = os.path.dirname(
+			__file__) + "/find_sub.sh" + " " + "-r" + " " + "batch_" + str(
+			batch) + "_reference.fa" + " " + "-0" + " " + readfile1 + " " + " " + "-m" + " " + "tog" + " " + "-c" + " " + "True" + " -d Y"
 	verify_proc = subprocess.run(verify_sub_command,
 								 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
 								 shell=True)
@@ -584,6 +588,7 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 	insertion_reads = {}
 	included_read_num = 0
 	for read_num,read in enumerate(sub_read):
+		print(read)
 		temp_misp = []
 		read_index = int(read[st_find.index_field]) - 1
 		read_str = read[st_find.read_field]
@@ -642,11 +647,19 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 		for j in range(0, blk_pos[-1]):  # change here to fill the blank with 0?
 			# compare base directly, soft clipping at beginning has been accounted
 
+
 			if blk_type[c] == "M" or blk_type[c] == "S":
 				#if len(insertion_len) > 0:
-
-				if ref[read_index + j-insertion_len[insertion_count]]!=read_str[j]:
-					temp_misp.append({read_index + j-insertion_len[insertion_count]:[ref[read_index + j-insertion_len[insertion_count]]+"|"+read_str[j]]})
+				if read_index + j - insertion_len[insertion_count] > len(ref) - 1:
+					temp_misp.append({read_index + j - insertion_len[insertion_count]: [
+						"-|" + read_str[j]]})
+				else:
+					try:
+						if ref[read_index + j-insertion_len[insertion_count]] != read_str[j]:
+							temp_misp.append({read_index + j-insertion_len[insertion_count]:[ref[read_index + j-insertion_len[insertion_count]]+"|"+read_str[j]]})
+					except:
+						print(read_index + j-insertion_len[insertion_count],j,len(read_str),len(ref))
+						exit()
 				#else:
 					#if ref[read_index + j]!=read_str[j]:
 						#temp_misp.append({read_index + j:[ref[read_index + j]+"|"+read_str[j]]})
