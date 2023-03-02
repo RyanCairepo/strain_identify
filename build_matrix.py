@@ -14,6 +14,7 @@ import itertools as its
 from dataclasses import dataclass, field
 
 import identify_verify
+import strain_finder
 import strain_finder as st
 
 
@@ -90,7 +91,33 @@ def read_sam(R_file,freq=False):
 
 	return read_list
 
+def dup_read_sam(R_file, ref):
+	read_list = []
+	real_narrowed = []
+	#print(freq)
 
+	r = pd.read_csv(R_file, delimiter=' ', names=['ID', 'strand', 'sta_p', 'sam_q', 'cigar'], encoding='unicode_escape')
+
+	read_number = r.shape[0]
+
+	print("r is", r)
+	read_freq = {}
+	for i in range(read_number):
+		read = [str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
+						  str(r["cigar"].loc[i])]
+
+		if read[strain_finder.read_field] not in read_freq.keys():
+			read_list.append(read)
+			read_freq.update({read[3]:1})
+			index = int(read[strain_finder.index_field])-1
+			if read[strain_finder.read_field] == ref[index:index+len(read[strain_finder.read_field])]:
+				real_narrowed.append(read)
+		else:
+			read_freq.update({read[3]:read_freq[read[3]]+1})
+
+
+
+	return read_list, read_freq,real_narrowed
 
 def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_info=None, target="real_narrowed"):
 	# global narrowed_read,maxposition, read_number,row,val,col
@@ -219,11 +246,11 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 				if (matched / base_length < match_limit) or iread[0] in marked_id:
 					# if (len(cigar_str)>1 or not re.match('^[0-9]+[M]$',cigar_str[0])):
 					# if(matched/read_length<match_limit):
-
+					continue
 					# print(i,str(r.loc[i]), matched)
-					if  not (freq_reads[sam_q] > 1 and index+len(sam_q)<st.gene_length and iread[0] not in marked_id):
-						exclude = True
-						continue
+					#if  not (freq_reads[sam_q] > 1 and index+len(sam_q)<st.gene_length and iread[0] not in marked_id):
+						#exclude = True
+						#continue
 			else: #handle combined SRR
 				if (matched / base_length < match_limit):
 					exclude = True
@@ -534,7 +561,7 @@ def build_insertion(matrix_info, count_threshold):
 	return matrix_info
 
 
-def narrow_reads(ref, narrowed_read, out_dir, brute_force=True):
+def narrow_reads(ref, narrowed_read, out_dir, brute_force=True, paired=True):
 	# global narrowed_read,  half_real_reads, half_real_ID
 
 	ID_count = {}
@@ -614,45 +641,45 @@ def narrow_reads(ref, narrowed_read, out_dir, brute_force=True):
 
 	mated = []
 
-	for rl in narrowed_read:
-		if rl[0] in ID_count.keys():
-			ID_count[rl[0]] += 1
+	if paired:
+		for rl in narrowed_read:
+			if rl[0] in ID_count.keys():
+				ID_count[rl[0]] += 1
 
-		else:
-			ID_count[rl[0]] = 1
+			else:
+				ID_count[rl[0]] = 1
 
-	for mate_rl in narrowed_read:
-		if ID_count[mate_rl[0]] == 2:
-			mated.append(mate_rl)
+		for mate_rl in narrowed_read:
+			if ID_count[mate_rl[0]] == 2:
+				mated.append(mate_rl)
 
-	narrowed_read = mated
-	print(len(mated), len(narrowed_read), " reads in paired_real_narrowed_extract.sam", len(ID_count))
-	with open(out_dir + "paired_real_narrowed_extract.sam", "w+") as nf1:
-		for line in narrowed_read:
-			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		narrowed_read = mated
+		print(len(mated), len(narrowed_read), " reads in paired_real_narrowed_extract.sam", len(ID_count))
+		with open(out_dir + "paired_real_narrowed_extract.sam", "w+") as nf1:
+			for line in narrowed_read:
+				nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 
-	if len(mated) == 0:
-		print("no read satisfies paired matched condition, exiting")
-		#exit(-2)
-
-
-	if brute_force:
-		real_narrowed_ids = set([x[0] for x in true_total_match])
-		count_nr_narrowed_ids = Counter([x[0] for x in nearly_true_total])
-		potential_mutated_reads = []
-		with open(out_dir + "potential_mutated_extract.sam", "w+") as pmf:
-			for line in nearly_true_total:
-				#if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2]) and 13 < line[2] < 29883 :
-				if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2] or read_ferq[line[3]]>1) and 13 < line[2] < 29883:
-					potential_mutated_reads.append(line)
-					pmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-
-		print(len(potential_mutated_reads),"potential mutated reads")
+		if len(mated) == 0:
+			print("no read satisfies paired matched condition, exiting")
+			#exit(-2)
 
 
-		return true_total_match,mated,nearly_true_total,potential_mutated_reads
 
-	return (true_total_match, mated, nearly_true_total)
+	real_narrowed_ids = set([x[0] for x in true_total_match])
+	count_nr_narrowed_ids = Counter([x[0] for x in nearly_true_total])
+	potential_mutated_reads = []
+	with open(out_dir + "potential_mutated_extract.sam", "w+") as pmf:
+		for line in nearly_true_total:
+			#if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2]) and 13 < line[2] < 29883 :
+			if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2] or read_ferq[line[3]]>1) and 13 < line[2] < 29883:
+				potential_mutated_reads.append(line)
+				pmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+
+	print(len(potential_mutated_reads),"potential mutated reads")
+
+
+	return true_total_match,mated,nearly_true_total,potential_mutated_reads
+
 
 
 def marking(read_num, cvg, narrowed_read, col=0):

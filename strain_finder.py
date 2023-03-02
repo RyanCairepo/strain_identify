@@ -82,7 +82,7 @@ def get_arguments():
 	parser.add_argument("--bubble_mode", type=str, default="False")
 	parser.add_argument("--brute_force", type=str,default="True")
 	parser.add_argument("--misp_mode", type=str, default="False")
-	parser.add_argument("--check_gap", type=str,default="false")
+	parser.add_argument("--check_gap", type=str,default="False")
 	parser.add_argument("--output_dir", type=str,default="")
 	parser.add_argument("--region_break",type=str,default="")
 	parser.add_argument("--gap_threshold",type=int,default=1)
@@ -182,28 +182,60 @@ if __name__ == "__main__":
 	else:
 		print(len(marked_id), "reads already marked")
 
-	read_list = bm.read_sam(R_file)
+	start_time = time.time()
 
-	if args.check_gap != "False":
-		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True,target="raw")
+	if args.check_gap == "False":
+		gaps = []
+		cols = []
+		read_list,read_freq,real_narrowed = bm.dup_read_sam(R_file,ref)
+		initial_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id, True,target="raw")
+		for column in range(400, initial_matrix_info.narrowed_matrix.shape[1]):
+			tmp = np.squeeze(initial_matrix_info.narrowed_matrix.getcol(column).toarray())
+			tmp_count = np.bincount(tmp)[1:]
+			cols.append(column)
+			if sum(tmp_count) < args.gap_threshold:
+				gaps.append(column)
+		print("cols for checking gaps", min(cols), max(cols))
+		if len(gaps) > 0:
+			if args.check_gap != "false":
+				print("only checking gaps")
+				with open("gaps.txt", "w+") as gapf:
+					for gap_col in gaps:
+						gapf.write(str(gap_col) + ",")
+
+			for gap in gaps:
+				print(gap, end=",")
+			print()
+			# exit()
+			exit(-4)
+		else:
+			print("no gaps")
+
 
 	else:
+
+		read_list = bm.read_sam(R_file)
+		#read_list,freq = bm.dup_read_sam(R_file)
+		print("read_sam takes", time.time()-start_time)
 		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id)
-	prev_time = time.time()
+
+	print("matrix_initialization", time.time()-start_time)
 
 
 
 	#if args.brute_force == "True":
+
 	real_narrowed, paired_real_narrowed, nearly_real_narrowed, potential_mutated = bm.narrow_reads(ref,
-																					initial_matrix_info.narrowed_read,
-																					out_dir, True)
+		initial_matrix_info.narrowed_read,out_dir, True)
 
 	#real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, False)
+	print("narrowed_read",time.time()-start_time)
 
 	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
+	print("real_narrowed_matrix",time.time()-start_time)
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
 	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed,match_limit,marked_id,False,intermit_matrix_info,"nearly_real_narrowed")
-
+	print("nearly_real_narrowed_matrix",time.time()-start_time)
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id)
 	intermit_matrix_info.real_narrowed_read = real_narrowed
 	#intermit_matrix_info.real_narrowed_read = paired_real_narrowed
@@ -213,38 +245,9 @@ if __name__ == "__main__":
 
 
 	#------------------------------------------brute force mode----------
-	gaps = []
-	cols =[]
+
 	del initial_matrix_info
-	for column in range(400,intermit_matrix_info.real_narrowed_matrix.shape[1]):
-		tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(column).toarray())
-		tmp_count = np.bincount(tmp)[1:]
-		cols.append(column)
-		if sum(tmp_count) < args.gap_threshold:
-			gaps.append(column)
-	print("cols for checking gaps",min(cols),max(cols))
-	if len(gaps) > 0:
-		if args.check_gap != "false":
-			print("only checking gaps")
-			with open("gaps.txt","w+") as gapf:
-				for gap_col in gaps:
-					gapf.write(str(gap_col)+",")
 
-
-		for gap in gaps:
-
-			print(gap,end=",")
-		print()
-		#exit()
-		exit(-4)
-	else:
-		print("no gaps")
-		#exit()
-	#exit() if find_sub != "no"
-
-	if args.check_gap != "false":
-		print("only checking gaps")
-		exit()
 
 	if args.brute_force == "True":
 		print("brute_force mode")
@@ -270,7 +273,7 @@ if __name__ == "__main__":
 
 
 		#print({k:v for k,v in mutated_read_freq.items() if v > 1 })
-		print(sorted_mutated_read)
+		#print(sorted_mutated_read)
 		smr_index = 0
 		misP =[]
 		added_read = set({})
@@ -332,10 +335,14 @@ if __name__ == "__main__":
 									# mut_codon = ref_codon[0:index] + sorted_mutated_read[smr_index][read_field][mp-smr_read_index] + ref_codon[index + 1:]
 									for i in range(mp-index,mp+(3-index)):
 										# if the adjacent spots are also misPs, will use the read's adjecent spot instead of ref
-										if i in tmp_misP_set and 0 <= i-smr_read_index < len(sorted_mutated_read[smr_index][read_field]):
-											mut_codon += sorted_mutated_read[smr_index][read_field][i-smr_read_index]
-										else:
-											mut_codon += ref[i]
+
+										if i < len(ref):
+											if i in tmp_misP_set and 0 <= i-smr_read_index < len(sorted_mutated_read[smr_index][read_field]):
+												mut_codon += sorted_mutated_read[smr_index][read_field][i-smr_read_index]
+											else:
+
+												mut_codon += ref[i]
+
 
 									if mut_codon == "TAA" or mut_codon == "TGA" or mut_codon == "TAG":
 										print("stop codon produced by",sorted_mutated_read[smr_index], tmp_misP)
@@ -356,98 +363,7 @@ if __name__ == "__main__":
 
 					reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
 
-			'''
-			for i,base in enumerate(sorted_mutated_read[smr_index][read_field]):
-				if ref[smr_read_index+i]!= base and smr_read_index+1 in spike_range:
 
-					tmp_misP.append(smr_read_index + i)
-			if len(tmp_misP) == 0:
-				print("no muation inside ",spike_range,"continue to next read")
-				continue
-			reduced_tmp_misP = []
-			for mpi,mp in enumerate(tmp_misP):
-				if mp not in spike_range:
-
-					continue
-				reduced_tmp_misP.append(mp)
-			if len(reduced_tmp_misP) == 0:
-				print("not a  mutation in spike range,continue")
-				continue
-			tmp_misP = reduced_tmp_misP
-			
-			otherside_potential_mutated =[]
-			
-			#print(intermit_matrix_info.real_narrowed_matrix.shape)
-			del i
-			rn_matrix = intermit_matrix_info.real_narrowed_matrix
-			covered_read = []
-			included_reduced_smr = set({})
-			for i in range(smr_read_index-1,smr_read_index+len(sorted_mutated_read[smr_index][read_field])+1):
-				if i >= rn_matrix.shape[1]:
-					break
-				tmp = np.squeeze(rn_matrix.getcol(i).toarray())
-				read_num = np.nonzero(tmp)[0]
-				for num in read_num:
-					if intermit_matrix_info.real_narrowed_read[num][read_field] not in included_reduced_smr:
-						reduced_sorted_mutated_read.extend(intermit_matrix_info.real_narrowed_read[num])
-				#reduced_sorted_mutated_read.extend([intermit_matrix_info.real_narrowed_read[x] for x in read_num if intermit_matrix_info.real_narrowed_read[x][3] not in included_reduced_smr])
-				#included_reduced_smr.add(intermit_matrix_info.real_narrowed_read[x][3] for x in read_num )
-
-
-				
-				tmp_otherside, intermit_matrix_info.real_narrowed_read = bm.collecting_bubbles(list(read_num), intermit_matrix_info.real_narrowed_read, True)
-				otherside_potential_mutated.extend(tmp_otherside)
-			
-			#print("otherside potential mutated ",len(otherside_potential_mutated))
-
-			if len(otherside_potential_mutated) == 0:
-				print("no read covering", sorted_mutated_read[smr_index])
-				continue
-			leftpoint = otherside_potential_mutated[0][2]-2 + len(otherside_potential_mutated[0][3])
-			rightpoint = otherside_potential_mutated[-1][2]
-			sorted_otherside_index = sorted([x[2] for x in otherside_potential_mutated])
-			if leftpoint != sorted_otherside_index[0]-2+len(otherside_potential_mutated[0][3]) or rightpoint != sorted_otherside_index[-1]:
-				print("other side mutated not sorted properly")
-				print(leftpoint,sorted_otherside_index[0],rightpoint,sorted_otherside_index[-1])
-				exit(-2)
-			#print("left and right point",leftpoint,rightpoint)
-
-			if leftpoint < tmp_misP[0] and rightpoint > tmp_misP[-1]:
-				stop_con = False
-				curr_pos = ()
-				for protein_pos in protein_loc:
-					if protein_pos[0] <= smr_read_index and protein_pos[1] > smr_read_index:
-						curr_pos = protein_pos
-				for mp in tmp_misP:
-					if len(curr_pos) > 0 and mp < curr_pos[1]-2:
-
-						mp_aa_index = (mp-curr_pos[0]) %3
-						if sorted_mutated_read[smr_index][3][mp-smr_read_index-mp_aa_index:mp-smr_read_index+(3-mp_aa_index)] == "TAA":
-							stop_con = True
-							print("stop codon produced by",mp,sorted_mutated_read[smr_index],ref[mp-mp_aa_index:mp+(3-mp_aa_index)])
-							print(mp,smr_read_index,mp_aa_index,curr_pos,sorted_mutated_read[smr_index][3][mp-smr_read_index-mp_aa_index-5:mp-smr_read_index+(3-mp_aa_index)+5])
-							break
-
-						sorted_mutated_read[smr_index].append((mp,ref[mp],sorted_mutated_read[smr_index][3][mp-smr_read_index]))
-					# not in protein range
-					else:
-						sorted_mutated_read[smr_index].append(
-							(mp, ref[mp], sorted_mutated_read[smr_index][3][mp - smr_read_index]))
-				#avoid stop condon produced by substitution
-				if stop_con:
-					continue
-				reduced_sorted_mutated_read.append(sorted_mutated_read[smr_index])
-
-			else:
-				continue
-				#print("misP", tmp_misP, "smr_read_index", smr_read_index, smr_index)
-				#print(otherside_potential_mutated[0])
-				#print(otherside_potential_mutated[-1])
-				#print("otherside_potential_mutated",len(otherside_potential_mutated))
-			with open("otherside_potentially_mutated_extract.sam","w+") as opmf:
-				for line in otherside_potential_mutated:
-					opmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-		'''
 			del smr_index
 			del smr_read_index
 		else:
@@ -511,7 +427,7 @@ if __name__ == "__main__":
 
 	add_matrix = intermit_matrix_info.narrowed_matrix.copy()
 	insertion_columns_list = intermit_matrix_info.insertion_columns_list
-	print("insertion matrix set, time", time.time() - prev_time)
+	print("insertion matrix set, time", time.time() - start_time)
 	# print(sorted(np.unique(np.array(insertion_columns))))
 	print("add_matrix", add_matrix.shape)
 	prev_time = time.time()

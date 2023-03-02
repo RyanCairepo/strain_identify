@@ -4,7 +4,7 @@ import identify_verify,re
 import build_matrix as bm
 import strain_finder as st_find
 
-def misp_syno(ref_file,sub_file,code_file,pos_file):
+def misp_syno(ref_file,sub_file,code_file,pos_file, offset=0):
 	endpoints_list = []
 	region_list = []
 	with open(pos_file, "r") as ppf:
@@ -35,6 +35,8 @@ def misp_syno(ref_file,sub_file,code_file,pos_file):
 				ref += line.strip()
 	subbed_read = bm.read_sam(sub_file,True)
 	misP,misp_source,misp_reads,subbed_read = identify_verify.get_misp(ref, subbed_read, False)
+	print(len(misP))
+
 	syn_stat = {}
 	move = []
 	for pos,clist in sorted([ (k,v) for k,v in misP.items()],key=lambda x:x[0]):
@@ -76,12 +78,15 @@ def misp_syno(ref_file,sub_file,code_file,pos_file):
 								#print(i)
 								#print(tmp_read[st_find.read_field][i - read_index])
 								# if the adjacent spots are also misPs, will use the read's adjecent spot instead of ref
-								if i in tmp_misP_set and 0 <= i - read_index < len(tmp_read[st_find.read_field]):
-									mut_codon += tmp_read[st_find.read_field][i - read_index]
-									test_ref_codon+=ref[i]
+								if i < len(ref):
+									if i in tmp_misP_set and 0 <= i - read_index < len(tmp_read[st_find.read_field]):
+										mut_codon += tmp_read[st_find.read_field][i - read_index]
+										test_ref_codon+=ref[i]
+									else:
+										mut_codon += ref[i]
+										test_ref_codon += ref[i]
 								else:
-									mut_codon += ref[i]
-									test_ref_codon += ref[i]
+									mut_codon = "XXX"
 						assert len(mut_codon) ==3
 						assert ref_codon == test_ref_codon,ref_codon+" "+test_ref_codon
 
@@ -91,16 +96,15 @@ def misp_syno(ref_file,sub_file,code_file,pos_file):
 
 						del_move = len([x for x in move if x < pos])
 
-						if translate[ref_codon] == translate[mut_codon]:
-							print("synonymous ",pos+1,change)
-							syn_stat.update({pos:"synonymous"})
-						else:
-							print("non-synonymous",pos+1,change)
-
+						if mut_codon not in translate.keys() or translate[ref_codon] != translate[mut_codon]:
+							print("non-synonymous", pos + 1 + offset, change)
 							syn_stat.update({pos: "non-synonymous"})
+						else:
+							print("synonymous ", pos + 1 + offset, change)
+							syn_stat.update({pos: "synonymous"})
 					else:
-						print("non-synonymous",pos+1,change)
-						syn_stat.update({pos:"non-synonymous"})
+						print("non-synonymous",pos+1 + offset,change)
+						syn_stat.update({pos :"non-synonymous"})
 		if not found:
 			syn_stat.update({pos:"unavailable"})
 
@@ -116,4 +120,7 @@ def misp_syno(ref_file,sub_file,code_file,pos_file):
 			print("\hline")'''
 
 if __name__ == "__main__":
-	misp_syno(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4])
+	if len(sys.argv) > 5:
+		misp_syno(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],int(sys.argv[5]))
+	else:
+		misp_syno(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])

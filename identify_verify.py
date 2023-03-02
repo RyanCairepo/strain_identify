@@ -11,6 +11,7 @@ import editdistance
 import matplotlib.pyplot as plt
 import scipy.interpolate
 import build_matrix as bm
+import strain_finder
 import strain_finder as st_find
 import verify
 
@@ -52,6 +53,7 @@ def fix_s_pos(subbed_reads,restore=False):
 		curr_pos = 0
 
 		if blk_type[0] == "S":
+
 			if not restore:
 				if index - blk_pos[0] < 0:
 
@@ -67,8 +69,8 @@ def fix_s_pos(subbed_reads,restore=False):
 
 					tmp_read[st_find.index_field] += blk_pos[0]
 			#subbed_reads[ir][st_find.index_field] = index + 1
-		new_subbed_reads.append(tmp_read)
 
+		new_subbed_reads.append(tmp_read)
 
 	return new_subbed_reads
 def restore_insertion_pos(subbed_read,inserted_pos):
@@ -98,7 +100,7 @@ def restore_insertion_pos(subbed_read,inserted_pos):
 
 def fix_insertion_pos(curr_read,subbed_read,candidate_read,covered_pos, inserted_pos):
 	"""
-	After an insertion read is replaced, fix subbed read index and candidate read index, also fix covered_pos position
+	After an insertion read is placed, fix subbed read index and candidate read index, also fix covered_pos position
 	inserted_pos is also updated. Duplicate insertion will be detected with inserted_pos and no change will happen
 	:param curr_read: read with insertion
 	:param subbed_read: list of subbed read
@@ -293,7 +295,7 @@ def if_clash(read,covered_pos,subbed_read, inserted_pos=None):
 					if j + r_start - insertion_offset in covered_pos:
 						if read[st_find.read_field][j  ] != covered_pos[j+r_start-insertion_offset]:
 							clash = True
-							print("base clash at read ",j + insertion_offset,read[st_find.read_field][j - insertion_offset],insertion_offset,covered_pos[j+r_start] )
+							print("base clash at read ",j + insertion_offset,read[st_find.read_field][j - insertion_offset],insertion_offset,covered_pos[j+r_start-insertion_offset] )
 							break
 		
 		return clash
@@ -564,7 +566,7 @@ def misp_equal(misp1, misp2):
 def get_misp(ref, sub_read, printing=True, fix_pos=True):
 	"""
 	handle getting misp in this func
-	:param ref: reference sequence file
+	:param ref: reference sequence
 	:param sub_read: list of reads
 	:param printing: True to print to stdout
 	:return: misPs {position: ["ref_base|misp_base"]}, misP_source {position:{change_str:[SRR_ID]}}, misP_reads {position:{change_str:[reads]}}
@@ -588,7 +590,7 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 	insertion_reads = {}
 	included_read_num = 0
 	for read_num,read in enumerate(sub_read):
-		print(read)
+		#print(read)
 		temp_misp = []
 		read_index = int(read[st_find.index_field]) - 1
 		read_str = read[st_find.read_field]
@@ -709,6 +711,10 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 
 		new_read.append([])
 
+		if read[0] == "225025":
+			print(temp_misp)
+			if len(temp_misp) > 1:
+				raise "error in misp"
 		# record misp in this blk
 		for misp_kv in temp_misp:
 			misp = [(k,v) for k,v in misp_kv.items()][0]
@@ -739,7 +745,10 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 				pos.update({misp[0]: [read]})
 			else:
 				pos[misp[0]].append(read)
-
+		if read[0] == "225025":
+			print(new_read[st_find.misp_field])
+			if len(new_read[st_find.misp_field]) > 1:
+				raise "error in misp"
 		read_with_misp.append(new_read)
 
 	# with open("different_bases.txt","w+") as wf:
