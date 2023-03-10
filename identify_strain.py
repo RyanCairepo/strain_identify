@@ -711,13 +711,15 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 
 		new_read.append([])
 
-		if read[0] == "225025":
-			print(temp_misp)
-			if len(temp_misp) > 1:
-				raise "error in misp"
+
 		# record misp in this blk
 		for misp_kv in temp_misp:
+
 			misp = [(k,v) for k,v in misp_kv.items()][0]
+			for k in misp:
+				if len(misp[1]) > 1:
+					print(new_read,temp_misp,misp)
+					raise "misp error"
 			#print(new_read)
 			new_read[st_find.misp_field].append(misp_kv)
 			if misp[0] not in misPs.keys():
@@ -745,10 +747,7 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 				pos.update({misp[0]: [read]})
 			else:
 				pos[misp[0]].append(read)
-		if read[0] == "225025":
-			print(new_read[st_find.misp_field])
-			if len(new_read[st_find.misp_field]) > 1:
-				raise "error in misp"
+
 		read_with_misp.append(new_read)
 
 	# with open("different_bases.txt","w+") as wf:
@@ -775,7 +774,8 @@ def get_misp(ref, sub_read, printing=True, fix_pos=True):
 			# wf.write(str(k)+":"+v+", ")
 
 	for k, v in sorted(misPs.items(), key=lambda x: x[0]):
-		print(k, v)
+		if printing:
+			print(k, v)
 
 	return misPs, misPs_source, misP_reads,read_with_misp
 
@@ -821,9 +821,17 @@ def write_misp(accepted_misps,filename):
 		for misp_pos in sorted(list(accepted_misps.keys())):
 			val = accepted_misps[misp_pos]
 			bases = val[0].split("|")
-			print(str(misp_pos + 1), "&", bases[0], "&", bases[1], "&", val[1], "&", val[2], "\\\\\n\hline")
-			mf.write(str(misp_pos + 1) + " & " + str(bases[0]) + " & " + bases[1] + "&" + str(val[1]) + " & " + str(
-				val[2]) + "\\\\\n\hline\n")
+			if len(val) == 2:
+				print(str(misp_pos + 1), "&", bases[0], "&", bases[1], "&", val[1], "&", val[2], "\\\\\n\hline")
+				mf.write(str(misp_pos + 1) + " & " + str(bases[0]) + " & " + bases[1] + "&" + str(val[1]) + " & " + str(
+					val[2]) + "\\\\\n\hline\n")
+			elif len(val) == 1:
+				#print(str(misp_pos + 1), "&", bases[0], "&", bases[1], "&", "\\\\\n\hline")
+				mf.write(str(misp_pos + 1) + " & " + str(bases[0]) + " & " + bases[1] + "&" + bases[2] + "\\\\\n\hline\n")
+
+			else:
+				raise "value error for write_misp(),val is "+str(val)
+
 def write_seq(ref,filename):
 	match = re.match('strain_([0-9]+)',filename)
 	strain = ""

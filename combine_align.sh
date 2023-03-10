@@ -4,20 +4,23 @@ cp /dev/null combined_extract.sam
 while getopts ":s:p:" option; do
     case ${option} in
     p)
-        for ((i = 2; i < (($#));i+=2)); do
+        echo "paired_end mode"
+        for ((i = 3; i < (($#));i+=2)); do
 
             j=$((${i}+1))
-            #echo "${!i}" "${!j}"
+            echo "$i" "${!i}" "$j" "${!j}"
             #echo "${@[$f]}" "${@[(($f+1))]}"
-            ${DIR}/find_sub.sh -r "$1" -1 "${!i}" -2 "${!j}" -m tog -a bowtie2 -c Y -d Y -o ${i}_out
-            cat ${i}_out/narrowed_extract.sam >> combine_extract.sam
+
+            ${DIR}/find_sub.sh -r "$2" -1 "${!i}" -2 "${!j}" -m tog -a bowtie2 -c Y -d Y -o ${i}_out
+            cat ${i}_out/extract.sam >> combine_extract.sam
 
         done;;
     s)
-        for f in "${@:2}"; do
+        echo "single_end mode"
+        for f in "${@:3}"; do
             echo $f
-             ${DIR}/find_sub.sh -r "$1" -0 $f -c Y -d Y -o ${i}_out
-             cat ${i}_out/narrowed_extract.sam >> combine_extract.sam
+             ${DIR}/find_sub.sh -r "$2" -0 $f -c Y -d Y -o ${i}_out
+             cat ${i}_out/extract.sam >> combine_extract.sam
         done;;
     \?)
         echo "-s for single end read files, -p for paired end read files"

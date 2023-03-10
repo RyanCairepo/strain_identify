@@ -6,6 +6,7 @@ collections, copy, pandas, numpy, scipy.sparse, typing, argparse, statistics
 Steps to run the program:
 1. obtain the read files, preferably in fastq format
 2. obtain the reference sequence in fasta format
+2.1. (optional) Correcting FASTQ read with small_RNA_propor, a compiled C++ program running on linux that does error correction for reads with command "./smallRNA_proper -f read_file". The output of correction is in "changed_list.txt".
 3. run the strain identification process with /path/to/find_sub.sh -r reference.fa -1 read_1.fastq -2 read_2.fastq -m tog 
 if the read files are in fasta format,
 /path/to/find_sub.sh -r reference.fa -1 read_1.fasta -2 read_2.fasta -m tog -f
@@ -14,11 +15,7 @@ find_sub.sh -r reference.fa -0 read_file.fastq
 
 The output consists of the nucleotide sequences of detected strains, named in the format "final_strain_x_reference.fa", x is the numerical label of strains, and "subbed_read_x.fa", a set of reads that belong to this strains and are different from the reference sequence.
 
-4. optional step of verification. Start by obtaining relevant samples. After that, run combine_alignment.sh -p sample1_r1.fastq sample1_r2.fastq sample2_r1.fastq sample2_r2.fastq
-For single end read files, run combine_alignment.sh -s sample1.fasta sample2.fasta
-
-The output of the previous step is stored in combine_extract.sam. Run:
- verify.py N final_strain_N_reference.fa combine_extract.sam 
+3.1. (optional) step of verification. Start by obtaining relevant samples. After that, run verify.py N original_reference.fa -p(paired end reads, for single end use -s) sample1_r1.fastq sample1_r2.fastq sample2_r1.fastq sample2_r2.fastq.
 N is the numerical labelling of strain from step 3.
 
 5. optional step for inferring synonymous state. It determines the changes in the nucleotide sequences are synonymous or non-synonymous. 

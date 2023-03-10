@@ -392,11 +392,11 @@ if [ "$check_gap" == false ] ; then
         python3 "${DIR}"/get_ori_half.py extract.sam "${read1}" "${read2}"
         cp half_real_R1.fastq "${out_dir}"
         cp half_real_R2.fastq "${out_dir}"
-        python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real_R1.fastq" "${out_dir}/half_real_R2.fastq" $strain_num
+        python3 "${DIR}"/identify_strain.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real_R1.fastq" "${out_dir}/half_real_R2.fastq" $strain_num
     else
         python3 "${DIR}"/get_ori_half.py extract.sam "${read}" "none"
         cp half_real.fastq "${out_dir}"
-        python3 "${DIR}"/identify_verify.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real.fastq" "none" $strain_num
+        python3 "${DIR}"/identify_strain.py "${ref}" "${out_dir}"/sub_read_candidate.sam "${out_dir}/half_real.fastq" "none" $strain_num
     fi
 
 else

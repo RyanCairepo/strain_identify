@@ -11,9 +11,9 @@ import editdistance
 import matplotlib.pyplot as plt
 import scipy.interpolate
 import build_matrix as bm
-import identify_verify
+import identify_strain
 import strain_finder as st_find
-import identify_verify as idv
+import identify_strain as idv
 
 
 def new_verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, candidate_sam,stage=0):
@@ -142,7 +142,7 @@ def verify_misp(ref_file, support_matrix_info, sub_read_file, new_strain_file, c
 	i = 0
 	while (i < len(new_subbed_read)):
 		temp_read = new_subbed_read[i]
-		new_subbed_read,candidate_read,covered_pos,inserted_pos = identify_verify.fix_insertion_pos(new_subbed_read[i],new_subbed_read,candidate_read,{},inserted_pos)
+		new_subbed_read,candidate_read,covered_pos,inserted_pos = identify_strain.fix_insertion_pos(new_subbed_read[i],new_subbed_read,candidate_read,{},inserted_pos)
 		i += 1
 	misp_fixed_subbed_read = []
 	fix_to_ori_mPos = {}
@@ -679,7 +679,7 @@ def curr_gap_reads(ref, strain, subbed_read, candidate_read, matrix, read_freq, 
 		temp_ref = ref[:read_index] + read[st_find.read_field] + ref[read_index + len(read[st_find.read_field]):]
 		# print(editdistance.eval(temp_ref,ref))
 
-		gap_list = identify_verify.verify_seq_support(temp_ref,batch,readfile1,readfile2)
+		gap_list = identify_strain.verify_seq_support(temp_ref,batch,readfile1,readfile2)
 		if len(gap_list) == 0:
 			subbed_read.append(candidate_read[batch])
 			subbed_read_set.add(read[st_find.read_field])
@@ -725,7 +725,7 @@ def curr_gap_reads(ref, strain, subbed_read, candidate_read, matrix, read_freq, 
 								 shell=True)
 	return subbed_read,misp_conflict
 
-def verify_strain(strain,ref_file,candidate_sam):
+def verify_strain(strain,ref_file,candidate_sam,option,other_read_files):
 
 	backup_command = "cp subbed_reads_" + str(strain) + ".sam subbed_reads_" + str(
 		strain) + ".sam.original; cp final_strain_" + str(strain) \
@@ -733,8 +733,10 @@ def verify_strain(strain,ref_file,candidate_sam):
 	backup_proc = subprocess.run(backup_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
 								 universal_newlines=True, shell=True)
 
-	other_SRR_command = os.path.dirname(__file__) + "/get_combined_extract.sh final_strain_" + str(
+	other_SRR_command = os.path.dirname(__file__) + "/combine_align.sh "+ option+ " final_strain_" + str(
 		strain) + "_reference.fa"
+	for rf in other_read_files:
+		other_SRR_command += " " + rf
 	other_SRR_proc = subprocess.run(other_SRR_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True)
 
 	fac_verify_misp(ref_file, "combine_final_strain_" + str(strain) + "_reference.fa_extract.sam",
@@ -744,4 +746,4 @@ def verify_strain(strain,ref_file,candidate_sam):
 				   shell=True)
 
 if __name__ == "__main__":
-	verify_strain(int(sys.argv[1]),sys.argv[2],sys.argv[3])
+	verify_strain(int(sys.argv[1]),sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5:])

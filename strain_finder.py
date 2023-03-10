@@ -16,7 +16,7 @@ import copy
 # import matplotlib.pyplot as plt
 from typing import Counter
 
-import identify_verify
+import identify_strain
 
 id_field = 0
 flag_field = 1
@@ -82,7 +82,7 @@ def get_arguments():
 	parser.add_argument("--bubble_mode", type=str, default="False")
 	parser.add_argument("--brute_force", type=str,default="True")
 	parser.add_argument("--misp_mode", type=str, default="False")
-	parser.add_argument("--check_gap", type=str,default="False")
+	parser.add_argument("--check_gap", type=str,default="false")
 	parser.add_argument("--output_dir", type=str,default="")
 	parser.add_argument("--region_break",type=str,default="")
 	parser.add_argument("--gap_threshold",type=int,default=1)
@@ -184,11 +184,18 @@ if __name__ == "__main__":
 
 	start_time = time.time()
 
-	if args.check_gap == "False":
+	if args.check_gap == "false":
+		read_list = bm.read_sam(R_file)
+		# read_list,freq = bm.dup_read_sam(R_file)
+		print("read_sam takes", time.time() - start_time)
+		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id)
+
+	else:
+
 		gaps = []
 		cols = []
 		read_list,read_freq,real_narrowed = bm.dup_read_sam(R_file,ref)
-		initial_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id, True,target="raw")
+		initial_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id, True, target="raw")
 		for column in range(400, initial_matrix_info.narrowed_matrix.shape[1]):
 			tmp = np.squeeze(initial_matrix_info.narrowed_matrix.getcol(column).toarray())
 			tmp_count = np.bincount(tmp)[1:]
@@ -196,12 +203,13 @@ if __name__ == "__main__":
 			if sum(tmp_count) < args.gap_threshold:
 				gaps.append(column)
 		print("cols for checking gaps", min(cols), max(cols))
+
 		if len(gaps) > 0:
-			if args.check_gap != "false":
-				print("only checking gaps")
-				with open("gaps.txt", "w+") as gapf:
-					for gap_col in gaps:
-						gapf.write(str(gap_col) + ",")
+
+			print("only checking gaps")
+			with open("gaps.txt", "w+") as gapf:
+				for gap_col in gaps:
+					gapf.write(str(gap_col) + ",")
 
 			for gap in gaps:
 				print(gap, end=",")
@@ -210,15 +218,7 @@ if __name__ == "__main__":
 			exit(-4)
 		else:
 			print("no gaps")
-
-
-	else:
-
-		read_list = bm.read_sam(R_file)
-		#read_list,freq = bm.dup_read_sam(R_file)
-		print("read_sam takes", time.time()-start_time)
-		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id)
-
+			exit()
 	print("matrix_initialization", time.time()-start_time)
 
 
@@ -231,10 +231,12 @@ if __name__ == "__main__":
 	#real_narrowed, paired_real_narrowed, nearly_real_narrowed = bm.narrow_reads(ref, initial_matrix_info.narrowed_read, out_dir, False)
 	print("narrowed_read",time.time()-start_time)
 
-	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
+	intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id, False, initial_matrix_info,
+												   "real_narrowed")
 	print("real_narrowed_matrix",time.time()-start_time)
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
-	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed,match_limit,marked_id,False,intermit_matrix_info,"nearly_real_narrowed")
+	intermit_matrix_info = bm.matrix_from_readlist(nearly_real_narrowed, match_limit, marked_id, False,
+												   intermit_matrix_info, "nearly_real_narrowed")
 	print("nearly_real_narrowed_matrix",time.time()-start_time)
 	#intermit_matrix_info = bm.matrix_from_readlist(paired_real_narrowed, match_limit, marked_id)
 	intermit_matrix_info.real_narrowed_read = real_narrowed
@@ -279,7 +281,7 @@ if __name__ == "__main__":
 		added_read = set({})
 		reduced_sorted_mutated_read = []
 		if args.region_break != "":
-			misPs, misP_source, misP_reads, sorted_mutated_read = identify_verify.get_misp(ref, sorted_mutated_read)
+			misPs, misP_source, misP_reads, sorted_mutated_read = identify_strain.get_misp(ref, sorted_mutated_read)
 			endpoints_list = []
 			with open(args.region_break,"r") as ppf:
 				for line in ppf:
@@ -377,7 +379,7 @@ if __name__ == "__main__":
 		#assemble
 
 		pos_sorted_mutated_read =copy.deepcopy(reduced_sorted_mutated_read)
-		pos_sorted_mutated_read = identify_verify.fix_s_pos(pos_sorted_mutated_read,restore=True)
+		pos_sorted_mutated_read = identify_strain.fix_s_pos(pos_sorted_mutated_read,restore=True)
 		#exclude reads with N
 		with open(out_dir+"sub_read_candidate.sam","w+") as candf:
 			for line in pos_sorted_mutated_read:

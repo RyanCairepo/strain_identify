@@ -13,7 +13,7 @@ from typing import Counter
 import itertools as its
 from dataclasses import dataclass, field
 
-import identify_verify
+import identify_strain
 import strain_finder
 import strain_finder as st
 
@@ -119,7 +119,8 @@ def dup_read_sam(R_file, ref):
 
 	return read_list, read_freq,real_narrowed
 
-def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_info=None, target="real_narrowed"):
+def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_info=None, target="real_narrowed",
+						 fix_s_pos=True):
 	# global narrowed_read,maxposition, read_number,row,val,col
 
 	read_number = 0
@@ -135,6 +136,8 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 	# read reference genome
 	changed = 0  # debug
 	included_i = 0
+	if fix_s_pos:
+		all_read = identify_strain.fix_s_pos(all_read)
 	if not initial:
 		# building matrix for different narrowed reads
 		if matrix_info is None or (target != "insertion" and target != "nearly_real_narrowed" and target != "real_narrowed" and target != "raw"):
@@ -319,7 +322,9 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 
 				curr_pos += 1
 
+			'''
 			if blk_type[0] == "S":
+				
 				if index - blk_pos[0] < 0:
 
 					start_pos = blk_pos[0] - index
@@ -328,7 +333,7 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 					if i == 3:
 						print("tmp_length", tmp_length, "base_length", base_length)
 				else:
-					index = index - blk_pos[0]
+					index = index - blk_pos[0]'''
 
 
 			'''
@@ -561,7 +566,7 @@ def build_insertion(matrix_info, count_threshold):
 	return matrix_info
 
 
-def narrow_reads(ref, narrowed_read, out_dir, brute_force=True, paired=True):
+def narrow_reads(ref, narrowed_read, out_dir, brute_force=True, paired=True,write=True):
 	# global narrowed_read,  half_real_reads, half_real_ID
 
 	ID_count = {}
@@ -616,15 +621,16 @@ def narrow_reads(ref, narrowed_read, out_dir, brute_force=True, paired=True):
 
 	print(len(true_total_match), " truely matched reads in real_narrowed_extract.sam")
 	print(len(nearly_true_total), "nearly real narrowed reads in nearly_narrowed_extract.sam")
-	with open(out_dir + "real_narrowed_extract.sam", "w+") as nf1:
-		for line in true_total_match:
-			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-	with open(out_dir + "nearly_real_narrowed_extract.sam", "w+") as nrnf:
-		for line in nearly_true_total:
-			nrnf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
-	with open(out_dir + "narrowed_extract.sam", "w+") as nf1:
-		for line in narrowed_read:
-			nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+	if write:
+		with open(out_dir + "real_narrowed_extract.sam", "w+") as nf1:
+			for line in true_total_match:
+				nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		with open(out_dir + "nearly_real_narrowed_extract.sam", "w+") as nrnf:
+			for line in nearly_true_total:
+				nrnf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+		with open(out_dir + "narrowed_extract.sam", "w+") as nf1:
+			for line in narrowed_read:
+				nf1.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 
 
 	narrowed_read = true_total_match
@@ -668,12 +674,13 @@ def narrow_reads(ref, narrowed_read, out_dir, brute_force=True, paired=True):
 	real_narrowed_ids = set([x[0] for x in true_total_match])
 	count_nr_narrowed_ids = Counter([x[0] for x in nearly_true_total])
 	potential_mutated_reads = []
-	with open(out_dir + "potential_mutated_extract.sam", "w+") as pmf:
-		for line in nearly_true_total:
-			#if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2]) and 13 < line[2] < 29883 :
-			if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2] or read_ferq[line[3]]>1) and 13 < line[2] < 29883:
-				potential_mutated_reads.append(line)
-				pmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
+	if write:
+		with open(out_dir + "potential_mutated_extract.sam", "w+") as pmf:
+			for line in nearly_true_total:
+				#if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2]) and 13 < line[2] < 29883 :
+				if (line[0] in real_narrowed_ids or count_nr_narrowed_ids[line[0] == 2] or read_ferq[line[3]]>1) and 13 < line[2] < 29883:
+					potential_mutated_reads.append(line)
+					pmf.write(line[0] + " " + str(line[1]) + " " + str(line[2]) + " " + line[3] + " " + line[4] + "\n")
 
 	print(len(potential_mutated_reads),"potential mutated reads")
 

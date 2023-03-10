@@ -1,10 +1,12 @@
+import os.path
+import subprocess
 import sys
-
-import identify_verify,re
+import numpy as np
+import identify_strain,re
 import build_matrix as bm
 import strain_finder as st_find
 
-def misp_syno(ref_file,sub_file,code_file,pos_file, offset=0):
+def misp_syno(ref_file,sub_file,code_file,pos_file, read1,read2,offset=0):
 	endpoints_list = []
 	region_list = []
 	with open(pos_file, "r") as ppf:
@@ -16,7 +18,7 @@ def misp_syno(ref_file,sub_file,code_file,pos_file, offset=0):
 	for se in endpoints_list:
 		start = se.split("..")[0]
 		end = se.split("..")[1]
-		protein_loc.append(range(int(start)-1,int(end)-1))
+		protein_loc.append(range(int(start)-1-offset,int(end)-1-offset))
 
 	assert len(protein_loc) == len(region_list),str(len(protein_loc))+" "+str(protein_loc)
 	translate = {}
@@ -34,11 +36,14 @@ def misp_syno(ref_file,sub_file,code_file,pos_file, offset=0):
 			if line[0] != ">":
 				ref += line.strip()
 	subbed_read = bm.read_sam(sub_file,True)
-	misP,misp_source,misp_reads,subbed_read = identify_verify.get_misp(ref, subbed_read, False)
+
+	misP,misp_source,misp_reads,subbed_read = identify_strain.get_misp(ref, subbed_read, False)
 	print(len(misP))
 
+	cov_matrix = bm.matrix_from_readlist(subbed_read, 0.9, set(), target="real_narrowed",fix_s_pos=False)
 	syn_stat = {}
 	move = []
+	syn_count = 0
 	for pos,clist in sorted([ (k,v) for k,v in misP.items()],key=lambda x:x[0]):
 		found = False
 		for pi,r in enumerate(protein_loc):
@@ -102,13 +107,32 @@ def misp_syno(ref_file,sub_file,code_file,pos_file, offset=0):
 						else:
 							print("synonymous ", pos + 1 + offset, change)
 							syn_stat.update({pos: "synonymous"})
+							syn_count += 1
 					else:
 						print("non-synonymous",pos+1 + offset,change)
 						syn_stat.update({pos :"non-synonymous"})
 		if not found:
 			syn_stat.update({pos:"unavailable"})
+	print("non-synonymous/synonymous ratio", syn_count,len(syn_stat),(len(syn_stat)-syn_count)/syn_count)
 
-	'''with open(misp_file,"r") as mif:
+	for pos in misP:
+		tmp = np.squeeze(cov_matrix.narrowed_matrix.getcol(pos).toarray())
+		tmp_count = np.bincount(tmp)[1:]
+		change = misP[pos]
+		changed_base = misP[pos][0].split("|")[1]
+		base_num = st_find.dict_tonu[changed_base]
+		read_num = np.where(tmp==base_num)
+
+		for matrix_val in tmp[tmp!=0]:
+			assert matrix_val == base_num,str(matrix_val)+" "+str(base_num)+" "+str(misp_reads[pos])
+		total_freq = sum([subbed_read[x][st_find.freq_field] for x in read_num[0]])
+		print(change,misp_source[pos],total_freq)
+		assert total_freq > 1, str(total_freq)+" "+str(pos)+" "+str(misp_reads[pos])
+		misP[pos][0] += "|" + str(total_freq)
+
+	identify_strain.write_misp(misP,"misp_"+os.path.basename(sub_file))
+
+	with open("misp_"+os.path.basename(sub_file),"r") as mif:
 		for line in mif:
 			m = re.search('^([0-9]+)',line)
 			if m is None:
@@ -117,10 +141,10 @@ def misp_syno(ref_file,sub_file,code_file,pos_file, offset=0):
 			new_line = line.replace('\\\\',' & '+syn_stat[index]+'\\\\')
 			new_line = new_line.replace(str(index),str(index+1))
 			print(new_line,end="")
-			print("\hline")'''
+			print("\hline")
 
 if __name__ == "__main__":
-	if len(sys.argv) > 5:
-		misp_syno(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],int(sys.argv[5]))
+	if len(sys.argv) > 7:
+		misp_syno(sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5],sys.argv[6],int(sys.argv[7]))
 	else:
-		misp_syno(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+		misp_syno(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4],sys.argv[5],sys.argv[6])
