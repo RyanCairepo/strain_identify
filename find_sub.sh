@@ -36,7 +36,7 @@ delete="n"
 threshold=1
 strain_num=2
 protein_pos=""
-while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:t:s:p:" option; do
+while getopts ":h:r:1:2:m:0:f:n:c:d:o:t:s:p:" option; do
     ((optnum++))
    case ${option} in
       h) # display Help
@@ -59,8 +59,7 @@ while getopts ":h:r:1:2:m:0:f:a:n:c:d:o:t:s:p:" option; do
      f)
         fasta="t"
         echo "$fasta";;
-    a)
-        aligner=${OPTARG};;
+
     n)
         round=${OPTARG}
         echo "$round";;
@@ -99,18 +98,11 @@ fi
 echo "building index for $ref"
 
 
-if [ "$aligner" == "bowtie2"  ]; then
-    echo
-    touch -d ${DIR}/bowtie2_index
-    rm ${DIR}/bowtie2_index/*
-    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2-build --large-index $ref ${DIR}/bowtie2_index/reference_index
-elif [ "$aligner" == "minimap2" ]; then
 
-    echo "minimap2 no need index"
-else
-    ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 index $ref
+touch -d ${DIR}/bowtie2_index
+rm ${DIR}/bowtie2_index/*
+${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2-build --large-index $ref ${DIR}/bowtie2_index/reference_index
 
-fi
 }
 
 
@@ -125,51 +117,33 @@ function  alignment {
         if [ -e "$fasta" ] && [ $fasta == "t" ]; then
              ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -f -r "$read1"  --local > gene.sam
         else
-            if [ $aligner == "minimap2" ]; then
-                ${DIR}/minimap2/minimap2 -ax sr "$ref" "$read" > gene.sam
-            elif [ $aligner == "bowtie2" ]; then
-                ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -r "$read" --local > gene.sam
-            else
-                ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t $core_count "$ref" "$read"  > gene.sam
-            fi
+            ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -r "$read" --local > gene.sam
         fi
 
     elif [ -e "$read1" ] && [ -e "$read2" ];then
         if [ $mode != "sep" ]; then
             echo "align both read files together, $fasta"
-            if [ "$aligner" == "bowtie2" ]; then
-                if [ -e "$fasta" ] && [ $fasta == "t" ]; then
-                   echo "bowtie2 fasta alignment"
-                   ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -f -1 "$read1" -2 "$read2" --local > gene.sam
-                else
-                    echo "bowtie2 alignment"
-                    if [ "$check_gap" == false ];then
 
-                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local  --score-min G,10,4 > gene.sam
-                    else
-                        echo "check_gap" $check_gap
-                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local > gene.sam #--score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50 
-                    fi
-                fi
-            elif [ "$aligner" == "minimap2" ]; then
-                echo "minimap2 alignment"
-                ${DIR}/minimap2/minimap2 -ax sr "$ref" "$read1" "$read2" > gene.sam
+            if [ -e "$fasta" ] && [ $fasta == "t" ]; then
+               echo "bowtie2 fasta alignment"
+               ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -f -1 "$read1" -2 "$read2" --local > gene.sam
             else
-                echo "bwa-mem2 alignment"
-                ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t ${core_count}  "$ref" "$read1" "$read2" > gene.sam
+                echo "bowtie2 alignment"
+                if [ "$check_gap" == false ];then
+
+                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local  --score-min G,10,4 > gene.sam
+                else
+                    echo "check_gap" $check_gap
+                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local > gene.sam #--score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50
+                fi
             fi
+
         else
         echo "align read file $read1 and $read2 separately"
-            if [ $aligner == "minimap2" ]; then
-                ${DIR}/minimap2/minimap2 -t ${core_count} -ax sr "$ref" "$read1" > gene.sam
-                ${DIR}/minimap2/minimap2 -t ${core_count} -ax sr "$ref" "$read2" > gene2.sam
-            elif [ $aligner == "bowtie2" ]; then
-                ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -i "$read1" > gene.sam
-                ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -i "$read1" > gene2.sam
-            else
-                ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t $((core_count)) "$ref" "$read1"  > gene.sam
-                ${DIR}/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t $((core_count)) "$ref" "$read1"  > gene2.sam
-            fi
+
+            ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -i "$read1" > gene.sam
+            ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -i "$read1" > gene2.sam
+
         fi
     else
         echo "Error getting read files, use -0 for single read file, use -1 read1.fq -2 read2.fq for paired-end reads"
