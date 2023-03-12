@@ -13,6 +13,7 @@ tqdm (pip install tqdm==4.64.0)
 karect (https://github.com/aminallam/karect)
 
 # Isolates correction workflow
+- **step 0**(optional): compile smallRNA_proper.c with any C++ compiler if the smallRNAproper cannot run on your system, it should work on any linux system.
 
 - **Step 1**: Begin with a smallRNA_propor corrected dataset $D$. To distinguish between high and low-frequency reads, we apply a predetermined frequency threshold, denoted as τ. Divide the reads into two groups accordingly: high-frequency and low-frequency.
 
