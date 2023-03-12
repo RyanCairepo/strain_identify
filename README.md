@@ -6,7 +6,7 @@ collections, copy, pandas, numpy, scipy.sparse, typing, argparse, statistics
 Steps to run the program:
 1. obtain the read files, preferably in fastq format
 2. obtain the reference sequence in fasta format
-2.1. (optional) Correcting FASTQ read with small_RNA_propor, a compiled C++ program running on linux that does error correction for reads with command "./smallRNA_proper -f read_file". The output of correction is in "changed_list.txt".
+2.1. (optional) Correcting FASTQ reads, see folder ErrorCorrection
 3. run the strain identification process with /path/to/find_sub.sh -r reference.fa -1 read_1.fastq -2 read_2.fastq -m tog 
 if the read files are in fasta format,
 /path/to/find_sub.sh -r reference.fa -1 read_1.fasta -2 read_2.fasta -m tog -f

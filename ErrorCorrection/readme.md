@@ -15,7 +15,7 @@ karect (https://github.com/aminallam/karect)
 # Isolates correction workflow
 - **step 0**(optional): compile smallRNA_proper.c with any C++ compiler if the smallRNAproper cannot run on your system, it should work on any linux system.
 
-- **Step 1**: Begin with a smallRNA_propor corrected dataset $D$. To distinguish between high and low-frequency reads, we apply a predetermined frequency threshold, denoted as τ. Divide the reads into two groups accordingly: high-frequency and low-frequency.
+- **Step 1**: Begin with a smallRNA_propor corrected dataset $D$. To distinguish between high and low-frequency reads, we apply a predetermined frequency threshold, denoted as τ. Divide the reads into two groups accordingly: high-frequency and low-frequency. Run "./smallRNA_proper -f read_file". The output of correction is in "changed_list.txt". If you have multiple read files, make sure run smallRNAproper in DIFFERENT directories.
 
 - **Step 2**: Identify all 1-edit-distance relationships between the high-frequency and low-frequency reads. Construct a read graph with sequences as nodes and relationships as edges.
 
