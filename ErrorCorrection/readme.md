@@ -1,10 +1,3 @@
-# Dependency
-
-biopython (pip install biopython==1.79)
-
-editdistance (pip install editdistance==0.6.0)
-
-karect (https://github.com/aminallam/karect)
 
 # Proportional correction workflow
 - **step 0**(optional): compile smallRNA_proper.c with any C++ compiler if the smallRNAproper cannot run on your system, it should work on any linux system. 
@@ -18,6 +11,14 @@ karect (https://github.com/aminallam/karect)
 - **Step 3**: Next, we correct errors in the singleton dataset $D_2$ using the program karect, but we keep only the corrected reads that differ from their original counterparts by one base, and save them as the corrected dataset $D_2^{\prime}$.
 
 - **Step 4**: Finally, we merge the corrected dataset $D_2^{\prime}$ and the non-singleton dataset $D_3$ to obtain the final corrected dataset.
+
+### Dependency
+
+biopython (pip install biopython==1.79)
+
+editdistance (pip install editdistance==0.6.0)
+
+karect (https://github.com/aminallam/karect)
 
 ### run singleton correction
 Install the dependency in your environment and set input files in the script of singleton_correction.py, then run 
