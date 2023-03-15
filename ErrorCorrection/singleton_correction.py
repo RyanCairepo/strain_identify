@@ -2,7 +2,7 @@
 # @Author: Pengyao Ping
 # @Date:   2023-03-14 17:41:08
 # @Last Modified by:   Pengyao Ping
-# @Last Modified time: 2023-03-15 01:49:41
+# @Last Modified time: 2023-03-15 12:51:18
 
 from typing import Counter
 from Bio import SeqIO
@@ -90,7 +90,7 @@ class SingletonErrorCorrection():
                 new_name_lst.append(record)
             else:
                 rest_name_lst.append(record)
-        f_output_name = 'no_change_singletons.' + self.file_type
+        f_output_name = self.output_dir + 'no_change_singletons.' + self.file_type
         no_change_fastq_file = self.extract_records(rest_name_lst, f_input1, f_output_name)
         print("inter_name_lst:{}".format(len(inter_name_lst)))
         print("new_name_lst:{}".format(len(new_name_lst)))
@@ -130,10 +130,10 @@ class SingletonErrorCorrection():
             del temp_original_name_lst
         del seq2name_inter_dict
         # save these frquency changing reads before and after correction
-        original_karect_inter_only_fastq_file = prefix + '_original_karect_inter_only.' + self.file_type            
+        original_karect_inter_only_fastq_file = self.output_dir + prefix + '_original_karect_inter_only.' + self.file_type            
         self.extract_records(keep_inter_karect_name_lst, f_input1, original_karect_inter_only_fastq_file)
         
-        karect_inter_only_fastq_file = prefix + '_karect_inter_only.' + self.file_type            
+        karect_inter_only_fastq_file = self.output_dir + prefix + '_karect_inter_only.' + self.file_type            
         self.extract_records(keep_inter_karect_name_lst, f_input2, karect_inter_only_fastq_file)
         
         with open(frequency_file, 'w') as f:
@@ -142,7 +142,7 @@ class SingletonErrorCorrection():
             f.write('Intersection sequences: ')
             f.write('\n')
             f.write('===========================================')
-        self.freqency_seq_extraction(self.output_dir + original_karect_inter_only_fastq_file, self.output_dir + karect_inter_only_fastq_file, frequency_file)
+        self.freqency_seq_extraction(original_karect_inter_only_fastq_file, karect_inter_only_fastq_file, frequency_file)
 
     #############################################################################
         seq2name_new_seq_dict = {}
@@ -175,28 +175,28 @@ class SingletonErrorCorrection():
             del temp_original_name_lst
         del seq2name_new_seq_dict
         # save these frquency changing reads before and after correction
-        original_karect_new_seq_only_fastq_file = prefix + '_original_karect_new_seq_only.' + self.file_type            
+        original_karect_new_seq_only_fastq_file = self.output_dir + prefix + '_original_karect_new_seq_only.' + self.file_type            
         self.extract_records(keep_new_seq_karect_name_lst, f_input1, original_karect_new_seq_only_fastq_file)
-        karect_new_seq_only_fastq_file = prefix + '_karect_new_seq_only.' + self.file_type            
-        self.extract_records(keep_new_seq_karect_name_lst, f_input2,karect_new_seq_only_fastq_file)
+        karect_new_seq_only_fastq_file = self.output_dir + prefix + '_karect_new_seq_only.' + self.file_type            
+        self.extract_records(keep_new_seq_karect_name_lst, f_input2, karect_new_seq_only_fastq_file)
         with open(frequency_file, 'a') as f:
             f.write('===========================================')
             f.write('\n')
             f.write('Newly generated sequences: ')
             f.write('\n')
             f.write('===========================================')
-        self.freqency_seq_extraction(self.output_dir + original_karect_new_seq_only_fastq_file, self.output_dir + karect_new_seq_only_fastq_file, frequency_file)
+        self.freqency_seq_extraction(original_karect_new_seq_only_fastq_file, karect_new_seq_only_fastq_file, frequency_file)
 
         # del records1
         # del records2
 
     ##################################################################################################################
         keep_original_name_lst = list(set(keep_new_seq_original_name_lst).union(set(keep_inter_original_name_lst)))
-        keep_original_f = prefix + '_keep_original_records.' + self.file_type   
+        keep_original_f = self.output_dir + prefix + '_keep_original_records.' + self.file_type   
         keep_original_fastq_file = self.extract_records(keep_original_name_lst, f_input1, keep_original_f)
 
         keep_karect_name_lst = list(set(keep_new_seq_karect_name_lst).union(set(keep_inter_karect_name_lst)))
-        keep_correct_f = prefix + '_keep_corrected_records.' + self.file_type            
+        keep_correct_f = self.output_dir + prefix + '_keep_corrected_records.' + self.file_type            
         keep_correct_fastq_file = self.extract_records(keep_karect_name_lst, f_input2, keep_correct_f)
 
         del keep_karect_name_lst
@@ -212,17 +212,18 @@ class SingletonErrorCorrection():
         corrected_singleton = self.output_dir + 'corrected_singleton.' + self.file_type
         os.system("cat %s %s > %s" % (karect_corrected, no_change_fastq_file, corrected_singleton))
 
-
-        os.system("rm %s" % (keep_original_f))
-        os.system("rm %s" % (keep_correct_f))
-        os.system("rm %s" % (karect_new_seq_only_fastq_file))
-        os.system("rm %s" % (original_karect_new_seq_only_fastq_file))   
-        os.system("rm %s" % (karect_inter_only_fastq_file))        
-        os.system("rm %s" % (f_output_name))
-        os.system("rm %s" % (karect_corrected))
-        os.system("rm %s" % (no_change_fastq_file))
+        # os.system("rm %s" % (f_output_name))
+        os.system("rm %s" % (original_karect_inter_only_fastq_file)) 
+        os.system("rm %s" % (karect_inter_only_fastq_file))
+        os.system("rm %s" % (original_karect_new_seq_only_fastq_file)) 
+        # os.system("rm %s" % (keep_original_f))
         os.system("rm %s" % (keep_original_fastq_file))
         os.system("rm %s" % (keep_correct_fastq_file))
+        # os.system("rm %s" % (keep_correct_f))
+        os.system("rm %s" % (karect_new_seq_only_fastq_file))
+        os.system("rm %s" % (karect_corrected))
+        os.system("rm %s" % (no_change_fastq_file))
+
         return corrected_singleton
 
     def extract_records(self, name_lst, f_input, f_output_name):
@@ -234,13 +235,12 @@ class SingletonErrorCorrection():
                 f1.write(str(item))
                 f1.write('\n')
 
-        new_fastq = self.output_dir + f_output_name
-        if os.path.exists(new_fastq):
-            os.system("rm %s" % new_fastq)
+        if os.path.exists(f_output_name):
+            os.system("rm %s" % f_output_name)
         # os.system("wc %s" % name_f_out)
-        os.system("seqtk subseq %s %s > %s" % (f_input, name_f_out, new_fastq))
+        os.system("seqtk subseq %s %s > %s" % (f_input, name_f_out, f_output_name))
         os.system("rm %s" % (name_f_out))
-        return new_fastq
+        return f_output_name
 
     def karect_correct_singleton(self):
         # # karect correction
@@ -376,7 +376,7 @@ def splitIsolates(fin, result_dir):
     extract_records2(result_dir, isolates_id_lst, fin, isolates_file)
     extract_records2(result_dir, non_isolates_id_lst, fin, non_isolates_file)
 
-    print("Isolated nodes extraction completed.")
+    print("Singletons extraction completed.")
     return isolates_file, non_isolates_file, file_type
 
 def extract_records2(working_dir, name_lst, data_set, sub_dataset):
@@ -398,12 +398,14 @@ def errorCorrection(karect, f_in, result_dir):
     corrected_isolates = SEC.karect_correct_singleton()
     bases = f_in.split('/')[-1]
     base = bases.split('.')
-    corrected_dataset = result_dir + base[0] + file_type
+    corrected_dataset = result_dir + base[0] + '.corrected.' + file_type
     os.system("cat %s %s > %s" % (corrected_isolates, non_isolates_file, corrected_dataset))
     os.system("rm %s" % (corrected_isolates))
     os.system("rm %s" % (non_isolates_file))
     os.system("rm %s" % (isolates_file))
-
+    os.system("rm *.txt")
+    os.system("rm *.fastq")
+    print("All done! Have a good day.")
     return corrected_dataset
 
 if __name__ == '__main__':
@@ -415,8 +417,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='singletions correction')
 
     parser.add_argument('-i', '--input', type=str, help='Input file name')
-    parser.add_argument('-o', '--output_dir', type=str, help='Output directory')
-    parser.add_argument('-k', '--karect', type=str, help='karect full path')
+    parser.add_argument('-o', '--output_dir', type=str, default="./result/", help='Output directory')
+    parser.add_argument('-k', '--karect', type=str, default="./karect", help='karect full path')
 
 
     args = parser.parse_args()

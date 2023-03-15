@@ -21,6 +21,9 @@ karect (https://github.com/aminallam/karect)
 
 ### run singleton correction
 Install the dependency in your environment and set input files in the script of singleton_correction.py, then run 
-`python singleton_correction.py -i input.fastq -o output_dir -k ./karect`
+
+`python singleton_correction.py -i <input.fastq> -o <output_dir> -k <./karect>`
+
 or
+
 `python singleton_correction.py --input <input.fastq> --output_dir <output_dir> --karect <./karect>`
