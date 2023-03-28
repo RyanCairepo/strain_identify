@@ -250,15 +250,20 @@ def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_
 				if bt != "I" and bt != "H":
 					tmp_length += int(m.group(1))  # get read length without counting clipped bases
 			if target != "raw":
+				if "SRR11092062" in iread[0]:
+					match_limit = 0.7
 				#if (matched / base_length < match_limit) or iread[0] in marked_id:
 				if (matched / base_length < match_limit) or iread[0] in marked_id:
 					# if (len(cigar_str)>1 or not re.match('^[0-9]+[M]$',cigar_str[0])):
 					# if(matched/read_length<match_limit):
-					continue
+
 					# print(i,str(r.loc[i]), matched)
-					#if  not (freq_reads[sam_q] > 1 and index+len(sam_q)<st.gene_length and iread[0] not in marked_id):
-						#exclude = True
-						#continue
+					if "SRR11092062" in iread[0]:
+						if not (freq_reads[sam_q] > 1 and index+len(sam_q)<st.gene_length and iread[0] not in marked_id):
+							exclude = True
+							continue
+					else:
+						continue
 			else: #handle combined SRR
 				if (matched / base_length < match_limit):
 					exclude = True

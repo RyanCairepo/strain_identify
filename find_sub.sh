@@ -44,7 +44,7 @@ while getopts ":h:r:1:2:m:0:f:n:c:d:o:t:s:p:" option; do
          help
          exit;;
      \?)
-         echo "Invalid option, use run.sh -h for usage"
+         echo "Invalid option, use find_sub.sh -h for usage"
          exit;;
      r)
          ref=${OPTARG};;
@@ -130,11 +130,15 @@ function  alignment {
             else
                 echo "bowtie2 alignment"
                 if [ "$check_gap" == false ];then
+                    if [[ $(head -1 "$read1") =~ "SRR11092062" ]]; then
+                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local  --score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50 > gene.sam
+                    else
+                        ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local  --score-min G,10,4 > gene.sam
+                    fi
 
-                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local  --score-min G,10,4 > gene.sam
                 else
                     echo "check_gap" $check_gap
-                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local > gene.sam #--score-min G,10,4  -D 25 -R 3 -N 1 -L 20 -i S,1,0.50
+                    ${DIR}/bowtie2-2.4.4-linux-x86_64/bowtie2 -p ${core_count} -x ${DIR}/bowtie2_index/reference_index -1 "$read1" -2 "$read2" --local > gene.sam
                 fi
             fi
 
@@ -355,7 +359,8 @@ else
 
    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --gap_threshold="$threshold" --output_dir="$out_dir" --region_break="$protein_pos";
 fi
-
+echo "debug exit before identify_strain"
+exit
 subamount=$(wc -l "$out_dir"/paired_real_narrowed_extract.sam)
 echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
 #after obtaining sub_read_candidates.sam from strain_finder.py
