@@ -7,7 +7,7 @@ Steps to run the program:
 1. obtain the read files, preferably in fastq format
 2. obtain the reference sequence in fasta format
 2.1. (optional) Correcting FASTQ reads, see folder ErrorCorrection
-3. run the strain identification process with /path/to/find_sub.sh -r reference.fa -1 read_1.fastq -2 read_2.fastq -m tog 
+3. run the strain identification process with /path/to/find_sub.sh -r reference.fa -1 read_1.fastq -2 read_2.fastq -m tog -p protein_pos.txt (run find_sub.sh -h for more info)
 if the read files are in fasta format,
 /path/to/find_sub.sh -r reference.fa -1 read_1.fasta -2 read_2.fasta -m tog -f
 if the read file is single-ended:
