@@ -14,7 +14,7 @@ echo "using $core_count threads"
 function  help {
     echo "Usage:"
     echo "Typical use for paired-end reads, align both read files (-1 read1 -2 read2) together (-m tog) with \$aligner (-a \$aligner):"
-    echo "run.sh -r reference.fasta -1 first_read_file.fastq -2 second_read_file.fastq -m c -a \$aligner"
+    echo "find_sub.sh -r reference.fasta -1 first_read_file.fastq -2 second_read_file.fastq -m c -a \$aligner"
     echo "-a:     Aligner of choice: minimap2 bowtie2 bwa-mem2"
     echo "-m:     Alignment mode, tog means align both paired-end read files together, sep means align the
         two read files separately"
