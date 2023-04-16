@@ -4,9 +4,9 @@ The required python3 packages are:
 collections, copy, pandas, numpy, scipy.sparse, typing, argparse, statistics
 
 Steps to run the program:
-1. obtain the read files, preferably in fastq format
+1. obtain the read files, preferably in fastq format.
 
-2. obtain the reference sequence in fasta format
+2. obtain the reference sequence in fasta format.
 
 2.1. (optional) Correcting FASTQ reads, see "readme.md" INSIDE folder ErrorCorrection
 
