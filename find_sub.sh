@@ -359,8 +359,7 @@ else
 
    python3 "${DIR}"/strain_finder.py $a $b --ref="${ref}"  --narrowing=True --match_l=${match_limit} --sam_file="$out_dir"/extract.sam --r1_file="$read"  --excluded_IDs="excluded_IDs.txt" --find_sub=True --brute_force=True --check_gap="$check_gap" --gap_threshold="$threshold" --output_dir="$out_dir" --region_break="$protein_pos";
 fi
-echo "debug exit before identify_strain"
-exit
+
 subamount=$(wc -l "$out_dir"/paired_real_narrowed_extract.sam)
 echo "$out_dir"/paired_real_narrowed_extract.sam $subamount >> find_sub_log.txt
 #after obtaining sub_read_candidates.sam from strain_finder.py
