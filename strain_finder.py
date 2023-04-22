@@ -100,6 +100,8 @@ def DNA_Re_complement(sequence):
 	return comp_s[::-1]
 
 
+
+
 if __name__ == "__main__":
 	# -------------------- main function is here-----------------------------------------------------
 	start_time = time.time()
@@ -194,16 +196,24 @@ if __name__ == "__main__":
 
 		gaps = []
 		cols = []
-		read_list,read_freq,real_narrowed = bm.dup_read_sam(R_file,ref)
-		initial_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id, True, target="raw")
-		for column in range(400, initial_matrix_info.narrowed_matrix.shape[1]):
-			tmp = np.squeeze(initial_matrix_info.narrowed_matrix.getcol(column).toarray())
+		read_list,unique_reads = bm.read_sam(R_file,get_unique=True)
+		if len(read_list) > 1000000 and len(unique_reads)/len(read_list) < 0.6:
+			print(len(read_list),"total reads",len(unique_reads),"unique reads")
+			read_list,read_freq = bm.dup_read_sam(read_list, ref)
+		initial_matrix_info = bm.matrix_from_readlist(read_list, match_limit, marked_id, True, target="raw")
+		real_narrowed, paired_real_narrowed, nearly_real_narrowed, potential_mutated = bm.narrow_reads(ref,initial_matrix_info.narrowed_read,out_dir, True)
+
+		intermit_matrix_info = bm.matrix_from_readlist(real_narrowed, match_limit, marked_id,False,initial_matrix_info,"real_narrowed")
+		intermit_matrix_info.real_narrowed_read = real_narrowed
+		gaps = []
+		cols = []
+
+		for column in range(100, intermit_matrix_info.real_narrowed_matrix.shape[1]):
+			tmp = np.squeeze(intermit_matrix_info.real_narrowed_matrix.getcol(column).toarray())
 			tmp_count = np.bincount(tmp)[1:]
 			cols.append(column)
 			if sum(tmp_count) < args.gap_threshold:
 				gaps.append(column)
-		print("cols for checking gaps", min(cols), max(cols))
-
 		if len(gaps) > 0:
 
 			print("only checking gaps")

@@ -64,9 +64,7 @@ markbit = 5
 # half_real_reads = []
 # half_real_ID = set({})
 
-
-
-def read_sam(R_file,freq=False):
+def read_sam(R_file, freq=False, get_unique=False):
 	read_list = []
 	with open(R_file,"r") as rf:
 		for line in rf:
@@ -85,16 +83,24 @@ def read_sam(R_file,freq=False):
 	read_number = r.shape[0]
 		# real_len = [0] *read_number
 	print("r is", r)
-	for i in range(read_number):
-		read = [str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
-						  str(r["cigar"].loc[i])]
-		if freq:
-			read.append(int(str(r['freq'].loc[i])))
-		read_list.append(read)
-
-
-
-	return read_list
+	if not get_unique:
+		for i in range(read_number):
+			read = [str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
+							  str(r["cigar"].loc[i])]
+			if freq:
+				read.append(int(str(r['freq'].loc[i])))
+			read_list.append(read)
+		return read_list
+	else:
+		unique_reads = set({})
+		for i in range(read_number):
+			read = [str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
+							  str(r["cigar"].loc[i])]
+			if freq:
+				read.append(int(str(r['freq'].loc[i])))
+			read_list.append(read)
+			unique_reads.add(read[st.read_field])
+		return read_list,unique_reads
 
 def dup_read_sam(R_file, ref):
 	read_list = []
@@ -110,19 +116,21 @@ def dup_read_sam(R_file, ref):
 	for i in range(read_number):
 		read = [str(r["ID"].loc[i]), int(r["strand"].loc[i]), int(r["sta_p"].loc[i]), str(r["sam_q"].loc[i]),
 						  str(r["cigar"].loc[i])]
-
+		if "D" in read[st.cigar_field]:
+			read_list.append(read)
+			continue
 		if read[strain_finder.read_field] not in read_freq.keys():
 			read_list.append(read)
 			read_freq.update({read[3]:1})
 			index = int(read[strain_finder.index_field])-1
-			if read[strain_finder.read_field] == ref[index:index+len(read[strain_finder.read_field])]:
-				real_narrowed.append(read)
+			#if read[strain_finder.read_field] == ref[index:index+len(read[strain_finder.read_field])]:
+				#real_narrowed.append(read)
 		else:
 			read_freq.update({read[3]:read_freq[read[3]]+1})
 
 
-
-	return read_list, read_freq,real_narrowed
+	print("read",len(read_list),"unique reads from",read_number)
+	return read_list, read_freq#,real_narrowed
 
 def matrix_from_readlist(all_read, match_limit, marked_id, initial=True, matrix_info=None, target="real_narrowed",
 						 fix_s_pos=True):
